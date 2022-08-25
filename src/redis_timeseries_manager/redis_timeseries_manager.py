@@ -463,13 +463,18 @@ class RedisTimeseriesManager:
             return False, str(e)
 
     
-    def read_last(self, c1:str, c2:str, timeframe:str=None):
+    def read_last(self, c1:str=None, c2:str=None, timeframe:str=None):
         """read the last record
             If exactly the last record is required, this performs faster than read_last_nth_record(n=1)
         """
-        c1 = c1.lower()
-        c2 = c2.lower()
         timeframe = timeframe.lower() if timeframe else list(self._timeframes.keys())[0]
+        if not c1 or not c2:
+            last = self.last_record(c1, c2, timeframe)
+            if not last[0]:
+                raise Exception(last[1])
+            last = last[1]
+            c1 = last['c1']
+            c2 = last['c2']
         try:
             ref_key = self._get_key_name(c1, c2, timeframe, self._lines[0])
             ref = self.ts.get(ref_key)
@@ -479,10 +484,46 @@ class RedisTimeseriesManager:
             record = self.read(c1, c2, timeframe=timeframe, from_timestamp=timestamp, to_timestamp=timestamp, timestamp_minimum_boundary=0)
             if not record[0]:
                 return record
-            return True, record[1][0]
+            return True, record[1][0], {'c1': c1, 'c2': c2, 'timeframe': timeframe}
         except Exception as e:
             return False, str(e)
 
+
+    def last_record(self, c1:str=None, c2:str=None, timeframe:str=None):
+        """Get the last record based on the parameters given
+        Args:
+            c1 (str, optional): c1. Set c1 filter.
+            c2 (str, optional): c1. Set c2 filter.
+            timeframe (str, optional): timeframe. Set timeframe filter.
+        Returns:
+            tuple: result_found(bool), result(dict)
+        """
+        filters = [f'tl={self._name}']
+        if c1:
+            filters.append(f'c1={c1}')
+        if c2:
+            filters.append(f'c2={c2}')
+        if timeframe:
+            filters.append(f'timeframe={timeframe}')
+        results = self.ts.mget(
+            filters=filters,
+            with_labels=True,
+        )
+        final = {'timestamp': 0}
+        for item in results:
+            for key, values in item.items():
+                timestamp = values[1]
+                if timestamp and timestamp > final['timestamp']:
+                    final = {
+                        'key': key,
+                        'timestamp': timestamp,
+                        'value': values[2],
+                        **values[0]
+                    }
+        if final['timestamp'] > 0:
+            final['timestamp'] = int(final['timestamp'] / 1000)
+            return True, final
+        return False, 'No record found'
 
     ########COMMON/PRIVATE METHODS############
 
