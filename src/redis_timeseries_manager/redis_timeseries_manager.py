@@ -467,15 +467,15 @@ class RedisTimeseriesManager:
         """read the last record
             If exactly the last record is required, this performs faster than read_last_nth_record(n=1)
         """
-        timeframe = timeframe.lower() if timeframe else list(self._timeframes.keys())[0]
-        if not c1 or not c2:
-            last = self.last_record(c1, c2, timeframe)
-            if not last[0]:
-                raise Exception(last[1])
-            last = last[1]
-            c1 = last['c1']
-            c2 = last['c2']
         try:
+            timeframe = timeframe.lower() if timeframe else list(self._timeframes.keys())[0]
+            if not c1 or not c2:
+                last = self.last_record(c1, c2, timeframe)
+                if not last[0]:
+                    raise Exception(last[1])
+                last = last[1]
+                c1 = last['c1']
+                c2 = last['c2']
             ref_key = self._get_key_name(c1, c2, timeframe, self._lines[0])
             ref = self.ts.get(ref_key)
             if ref is None:
@@ -498,32 +498,35 @@ class RedisTimeseriesManager:
         Returns:
             tuple: result_found(bool), result(dict)
         """
-        filters = [f'tl={self._name}']
-        if c1:
-            filters.append(f'c1={c1}')
-        if c2:
-            filters.append(f'c2={c2}')
-        if timeframe:
-            filters.append(f'timeframe={timeframe}')
-        results = self.ts.mget(
-            filters=filters,
-            with_labels=True,
-        )
-        final = {'timestamp': 0}
-        for item in results:
-            for key, values in item.items():
-                timestamp = values[1]
-                if timestamp and timestamp > final['timestamp']:
-                    final = {
-                        'key': key,
-                        'timestamp': timestamp,
-                        'value': values[2],
-                        **values[0]
-                    }
-        if final['timestamp'] > 0:
-            final['timestamp'] = int(final['timestamp'] / 1000)
-            return True, final
-        return False, 'No record found'
+        try:
+            filters = [f'tl={self._name}']
+            if c1:
+                filters.append(f'c1={c1}')
+            if c2:
+                filters.append(f'c2={c2}')
+            if timeframe:
+                filters.append(f'timeframe={timeframe}')
+            results = self.ts.mget(
+                filters=filters,
+                with_labels=True,
+            )
+            final = {'timestamp': 0}
+            for item in results:
+                for key, values in item.items():
+                    timestamp = values[1]
+                    if timestamp and timestamp > final['timestamp']:
+                        final = {
+                            'key': key,
+                            'timestamp': timestamp,
+                            'value': values[2],
+                            **values[0]
+                        }
+            if final['timestamp'] > 0:
+                final['timestamp'] = int(final['timestamp'] / 1000)
+                return True, final
+            return False, 'No record found'
+        except Exception as e:
+            return False, str(e)
 
     ########COMMON/PRIVATE METHODS############
 
