@@ -109,6 +109,8 @@ class RedisTimeseriesManager:
         for tf_name, tf_specs in self._timeframes.items():
             if tf_name in [tf_list[0]]: # skip first timeframe
                 continue
+            if 'ignore_rules' in tf_specs and tf_specs['ignore_rules']: # skip rule by flag
+                continue
             for line in lines:
                 specs = {
                     'c1': c1,
