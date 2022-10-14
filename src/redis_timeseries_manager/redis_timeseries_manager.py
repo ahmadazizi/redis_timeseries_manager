@@ -485,10 +485,10 @@ class RedisTimeseriesManager:
             timestamp = int(ref[0] / 1000)
             record = self.read(c1, c2, timeframe=timeframe, from_timestamp=timestamp, to_timestamp=timestamp, timestamp_minimum_boundary=0)
             if not record[0]:
-                return record
+                raise Exception(record[1])
             return True, record[1][0], {'c1': c1, 'c2': c2, 'timeframe': timeframe}
         except Exception as e:
-            return False, str(e)
+            return False, str(e), {'c1': c1, 'c2': c2, 'timeframe': timeframe}
 
 
     def last_record(self, c1:str=None, c2:str=None, timeframe:str=None):
@@ -637,7 +637,7 @@ class RedisTimeseriesManager:
         Returns:
             bool: result
         """
-        return self.client.exists(self._get_test_key_name(c1, c2))
+        return self.client.exists(self._get_test_key_name(c1.lower(), c2.lower()))
 
 
     ######## STATICS ################################
