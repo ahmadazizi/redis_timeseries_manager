@@ -491,9 +491,10 @@ class RedisTimeseriesManager:
             return False, str(e), {'c1': c1, 'c2': c2, 'timeframe': timeframe}
 
 
-    def last_record(self, c1:str=None, c2:str=None, timeframe:str=None, line:str=None):
-        """Find the last record inserted into timeseries; can be filtered by the parameters given
-        This is implemented differently from read_last(), used primarily to detect if a record already exists and fetch its value concurrently
+    def find_last(self, c1:str=None, c2:str=None, timeframe:str=None, line:str=None):
+        """Find the last value inserted into timeseries; can be filtered by the parameters given
+        This is implemented differently from read_last(); used primarily to check if a record already exists and fetch the intended value concurrently
+        Note that this method only returns the value of a single line.
         Args:
             c1 (str, optional): c1. Set c1 filter.
             c2 (str, optional): c1. Set c2 filter.
