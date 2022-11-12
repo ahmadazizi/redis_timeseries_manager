@@ -332,7 +332,7 @@ class RedisTimeseriesManager:
             return False, message
 
 
-    def read(self, c1:str, c2:str, timeframe:str=None, from_timestamp:int=0, to_timestamp:int=None, extra_records:int=None, timestamp_minimum_boundary:int=None):
+    def read(self, c1:str, c2:str, timeframe:str=None, from_timestamp:int=0, to_timestamp:int=None, extra_records:int=None, timestamp_minimum_boundary:int=None, raw_output:bool=False):
         """Read records based on conditions
         Args:
             c1 (str): c1
@@ -342,6 +342,7 @@ class RedisTimeseriesManager:
             to_timestamp (int, optional): Defaults to timestamp of current time.
             extra_records (int, optional): Number of extra_records before from_timestamp. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
             timestamp_minimum_boundary (int, optional): When extra_records set, this limits how much from_timestamp can decline. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
+            raw_output (bool, optional): return raw data in output for custom data preparation. You would want to write your custom _prepare_raw_results() function. Defaults to False
         Returns:
             list: list of tuples as (`timestamp(secs)`, `line1`, `line2`, ...)
         """
@@ -366,6 +367,8 @@ class RedisTimeseriesManager:
                 prev_dt = line
             # raw data is now collected as {l1: data, l2: data,...}
             # now prepare output and return
+            if raw_output:
+                return True, raw
             output = self._prepare_raw_results(raw)
             if not output[0]:
                 raise Exception(output[1])
@@ -375,7 +378,7 @@ class RedisTimeseriesManager:
             return False, message
 
 
-    def read_last_n_records(self, c1:str, c2:str, *, timeframe:str=None, n:int, minimum_timestamp:int=None):
+    def read_last_n_records(self, c1:str, c2:str, *, timeframe:str=None, n:int, minimum_timestamp:int=None, raw_output:bool=False):
         """read the last n records
         Args:
             c1 (str): c1
@@ -383,6 +386,7 @@ class RedisTimeseriesManager:
             timeframe (str): timeframe. Defaults to 1st timeframe.
             n (int): The number of required records
             minimum_timestamp (int, optional): The minimum timestap(secs) of valid record. If not provided, an optimized value will be chosen based on timeframe.
+            raw_output (bool, optional): return raw data in output for custom data preparation. You would want to write your custom _prepare_raw_results() function. Defaults to False
         Returns:
             tuple: success(bool), records_are_enough(bool), records(list)
             records is list of tuples as (`timestamp(secs)`, `line1`, `line2`, ...)
@@ -420,12 +424,14 @@ class RedisTimeseriesManager:
                 prev_dt = line
             # raw data is now collected as {l1: data, l2: data,...}
             # now prepare output and return
+            if raw_output:
+                return True, records_are_enough, raw
             output = self._prepare_raw_results(raw)
             if not output[0]:
                 raise Exception(output[1])
             return True, records_are_enough, output[1]
         except Exception as e:
-            return False, str(e)
+            return False, False, str(e)
 
 
     def read_last_nth_record(self, c1:str, c2:str, *, timeframe:str=None, n:int, minimum_timestamp:int=None):
@@ -493,8 +499,8 @@ class RedisTimeseriesManager:
 
     def find_last(self, c1:str=None, c2:str=None, timeframe:str=None, line:str=None):
         """Find the last value inserted into timeseries; can be filtered by the parameters given
-        This is implemented differently from read_last(); used primarily to check if a record already exists and fetch the intended value concurrently
-        Note that this method only returns the value of a single line.
+        This is implemented differently from read_last() and is based on labels; used primarily to check if a record already exists and fetch the intended value concurrently
+        Note that this method only returns the value of a single line(and also the timestamp).
         Args:
             c1 (str, optional): c1. Set c1 filter.
             c2 (str, optional): c1. Set c2 filter.
