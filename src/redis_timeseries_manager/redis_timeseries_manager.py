@@ -566,12 +566,6 @@ class RedisTimeseriesManager:
             tuple: result_found(bool), result(dict)
         """
         try:
-            filters = self._create_filter(
-                {
-                    'c1': c1,
-                    'c2': c2,
-                }
-            )
             filters = self._create_filters(
                 c1=c1,
                 c2=c2,
