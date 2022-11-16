@@ -107,9 +107,13 @@ t.read(
     c2='sensor1',
 )
 ```
-    [(123456, 1.0, 2.0), (123457, 3.0, 4.0), (123458, 5.0, 6.0)]
+    [[123456, 1.0, 2.0], [123457, 3.0, 4.0], [123458, 5.0, 6.0]]
 
-There are also some other methods to read or investigate about the data. `read_last_n_records()`, `read_last_nth_record()` and `read_last()` are those methods. Some additional parameters can also be used to control what data is read, they include `from_timestamp`, `to_timestamp` and `extra_records`. Refer to the documentations for more details about each method.
+There are also some other methods to read or investigate about the data. `read_last_n_records()`, `read_last_nth_record()`, `read_last()` and `find_last()` are those methods. 
+
+Since v2.0, pandas dataframes are supported. You can choose the format of output data when calling read methods. Supported formats are 'list' (python `list`, default format), 'df'(pandas dataframe) or 'raw' which is the raw data read from the timeseries.
+
+Some additional parameters can also be used to control what data are read, they include `from_timestamp`, `to_timestamp` and `extra_records`. Refer to the documentations of each method for details.
 
 
 
