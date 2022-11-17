@@ -126,8 +126,8 @@ _timeframes = {
     '1d': {'retention_secs': 60*60*24*365, 'ignore_rules': True},
 }
 ```
-In the above example, the `1d` timeframe is isolated and no compaction rule will be applied on that. Data can be inserted into this timeframe using `add(c1=..., timeframe='1d')`
-One usage may be in the case that you want to keep track and maintain the minute data but have a separate data source for daily data. Keep in mind that you should never write data directly into the timeframes that the result of compaction rules are written. In the above example, the `1m`(default) and `1d` timeframes are directly writable.
+In the above example, the `1d` timeframe is isolated and no compaction rule will have interaction with that. Data can be inserted into this timeframe using `add(c1=..., timeframe='1d')`
+One usage may be in the case that you want to keep track and maintain the minute data but have a separate data source for daily data. Keep in mind that you should never write data directly into the timeframes that the result of compaction rules are written. In the above example, the `1m`(default) and `1d` timeframes are safe to write directly.
 
 
 
