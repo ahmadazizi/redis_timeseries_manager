@@ -294,7 +294,7 @@ class RedisTimeseriesManager:
         """Add data records
             If c2 is not provided, it means that it resides inside the data at position `c2_position`
         Args:
-            data (list): list of lists containing data. Each inner list is as [timestamp, [c2], line1, line2, ...]
+            data (list): list of lists containing data(To insert a single record, no need to be enclosed in a `list`). Each inner list is as [timestamp, [c2], line1, line2, ...]
             c1 (str): classifier 1
             c2 (str, optional): classifier 2. If c2 is not provided, it means that it resides inside data at position `c2_position`
             c2_position (int, optional): position of c2 inside data. Must be provided if c2 is not provided.
@@ -316,6 +316,8 @@ class RedisTimeseriesManager:
                     self.create(c1, c2)
                 else:
                     raise Exception(f"Map {c1}:{c2} does not exist.")
+            if type(data[0]) not in [list, tuple]:
+                data = [data]
             for d in data:
                 if c2_inline:
                     c2 = d.pop(c2_position)
