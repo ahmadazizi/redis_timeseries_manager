@@ -5,11 +5,8 @@ As a result, multiple timeseries values can be refered with a timestamp as if th
 
 This library supports two levels of data classifiers(c1, c2) to interact with data, plus support for timeframes and data compression(downsampling).
 
-## About Redis
-Redis is an open source (BSD licensed), in-memory data structure store used as a database, cache, message broker, and streaming engine.
-
 ## About RedisTimeSeries
-RedisTimeSeries is a Redis module that adds a time series data structure to Redis. `RedisTimeseriesManager` uses RedisTimeSeries to store timeseries data.
+Redis is an open source (BSD licensed), in-memory data structure store used as a database, cache, message broker, and streaming engine. RedisTimeSeries is a Redis module that adds a time series data structure to Redis. `RedisTimeseriesManager` uses RedisTimeSeries to store timeseries data.
 
 ## Installation
 
@@ -115,6 +112,22 @@ Since v2.0, pandas dataframes are supported. You can choose the format of output
 
 Some additional parameters can also be used to control what data are read, they include `from_timestamp`, `to_timestamp` and `extra_records`. Refer to the documentations of each method for details.
 
+
+# Usage without data compaction
+
+If you do not need data to be compressed across timeframes, you can set only a single timeframe in `_timeframes` class property. This will fully disable compaction functionality; but note that at least one timeframe must be set always.
+
+To have a separate timeframe without data compaction, set `ignore_rules` to `True` in the timeframe definition:
+
+```python
+_timeframes = {
+    '1m': {'retention_secs': 60*60*24*10},
+    '1h': {'retention_secs': 60*60*24*90, 'bucket_size_secs': 3600},
+    '1d': {'retention_secs': 60*60*24*365, 'ignore_rules': True},
+}
+```
+In the above example, the `1d` timeframe is isolated and no compaction rule will be applied on that. Data can be inserted into this timeframe using `add(c1=..., timeframe='1d')`
+One usage may be in the case that you want to keep track and maintain the minute data but have a separate data source for daily data. Keep in mind that you should never write data directly into the timeframes that the result of compaction rules are written. In the above example, the `1m`(default) and `1d` timeframes are directly writable.
 
 
 
