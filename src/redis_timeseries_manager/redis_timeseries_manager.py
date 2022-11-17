@@ -338,7 +338,7 @@ class RedisTimeseriesManager:
             c1:str,
             c2:str,
             timeframe:str=None,
-            from_timestamp:int=0,
+            from_timestamp:int=None,
             to_timestamp:int=None,
             extra_records:int=None,
             timestamp_minimum_boundary:int=None,
@@ -364,10 +364,11 @@ class RedisTimeseriesManager:
         c1 = c1.lower()
         c2 = c2.lower()
         timeframe= timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
-        if not to_timestamp:
-            to_timestamp = int(time.time())
-        to_timestamp = to_timestamp * 1000
-        from_timestamp = from_timestamp*1000 if from_timestamp_inclusive else (from_timestamp+1)*1000
+        if from_timestamp and type(from_timestamp) is int:
+            from_timestamp = from_timestamp*1000 if from_timestamp_inclusive else (from_timestamp+1)*1000
+        else:
+            from_timestamp = '-'
+        to_timestamp = to_timestamp*1000 if to_timestamp and type(to_timestamp) is int else '+'
         try:
             if extra_records:
                 adjust_key_name = self._get_key_name(c1, c2, timeframe, list(self._timeframes.keys()))[0]
@@ -414,7 +415,7 @@ class RedisTimeseriesManager:
         c2 = c2.lower()
         timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
         # to_timestamp = int(time.time()) * 1000
-        minimum_timestamp = minimum_timestamp * 1000 if minimum_timestamp != None else self._get_optimized_from_timestamp(timeframe, n)
+        minimum_timestamp = minimum_timestamp * 1000 if minimum_timestamp is not None else self._get_optimized_from_timestamp(timeframe, n)
         #output vars
         records_are_enough = False
         try:
@@ -481,7 +482,7 @@ class RedisTimeseriesManager:
         c2 = c2.lower()
         timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
         to_timestamp = int(time.time()) * 1000
-        minimum_timestamp = minimum_timestamp * 1000 if minimum_timestamp != None else self._get_optimized_from_timestamp(timeframe, n)
+        minimum_timestamp = minimum_timestamp * 1000 if minimum_timestamp is not None else self._get_optimized_from_timestamp(timeframe, n)
         try:
             adjust_key_name = self._get_key_name(c1, c2, timeframe, self._lines[0])
             result = self.ts.revrange(
