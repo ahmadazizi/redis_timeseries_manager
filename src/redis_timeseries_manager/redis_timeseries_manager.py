@@ -707,7 +707,7 @@ class RedisTimeseriesManager:
         filter_options = ['c1', 'c2', 'line', 'timeframe']
         filters = [f'tl={cls._name}']
         for filter in filter_options:
-            if filter in kwargs:
+            if filter in kwargs and kwargs[filter] is not None:
                 filters.append(f"{filter}={kwargs[filter]}")
         return filters
 
