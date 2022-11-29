@@ -23,6 +23,7 @@
 
 
 import datetime, time, re, math
+from typing import Union
 
 import redis
 import pandas as pd
@@ -53,6 +54,12 @@ class RedisTimeseriesManager:
         """
         self.client = redis.Redis(host=host, port=port, db=db, password=password)
         self.ts = self.client.ts()
+        if not self._name:
+            raise Exception("`_name` was not set. please set the `_name` class property.")
+        if not self._lines:
+            raise Exception("`_lines` is empty. please set at least one line in the `_lines` class property.")
+        if not self._timeframes:
+            raise Exception("`_timeframes` is empty. please set at least one timeframe in the `_timeframes` class property.")
 
 
     def __enter__(self):
@@ -76,32 +83,54 @@ class RedisTimeseriesManager:
         return list(self._timeframes.keys())
 
 
-    def create(self, c1:str, c2:str):
+    def create(self, c1:str, c2:str, extra_labels:dict=None):
         c1 = c1.lower()
         c2 = c2.lower()
         if self.map_exists(c1, c2):
             return True, f'{c2} already exists'
         try:
-            self._create_tseries(c1, c2)
+            self._create_tseries(c1, c2, None, extra_labels)
             self._iter_rules(c1, c2)
             return True, f'Create {c1}:{c2} success!'
         except Exception as e:
             return False, str(e)
 
 
-    def _create_tseries(self, c1:str, c2:str, new_line:str=None):
+    def _create_tseries(self, c1:str, c2:str, new_line:str=None, extra_labels:dict=None):
         lines = self._lines if not new_line else [new_line.lower()]
         for tf_name, tf_specs in self._timeframes.items():
             for line in lines:
                 key_name = self._get_key_name(c1, c2, tf_name, line)
-                labels = {
+                main_labels = {
                     'tl': self._name,
                     'c1': c1,
                     'c2': c2,
                     'line': line,
                     'timeframe':tf_name
                 }
+                labels = {}
+                if extra_labels and type(extra_labels) is dict:
+                    labels.update(extra_labels)
+                labels.update(main_labels)
                 self._create_ts(key_name, tf_specs['retention_secs'], 'last', labels)
+
+
+    def _create_ts(self, key_name:str, retention_secs:int=0, duplicate_policy:str='last', labels:dict=None):
+        """Create timeseries
+        If a key already exists, you get a normal Redis error 
+        https://redis.io/commands/ts.create/
+        Args:
+            key_name (str): name of key
+            retention_secs (int, optional): retention in seconds. Defaults to 0(unlimited).
+            duplicate_policy (str, optional): Can be one of: block, first, last, min max. Defaults to 'last'.
+            labels (dict, optional): metadata lebels. Defaults to None.
+        """
+        self.ts.create(
+            key=key_name,
+            retention_msecs=retention_secs * 1000,
+            duplicate_policy=duplicate_policy,
+            labels=labels
+        )
 
 
     def _iter_rules(self, c1:str, c2:str, new_line:str=None):
@@ -173,24 +202,6 @@ class RedisTimeseriesManager:
         )
 
 
-    def _create_ts(self, key_name:str, retention_secs:int=0, duplicate_policy:str='last', labels:dict=None):
-        """Create timeseries
-        If a key already exists, you get a normal Redis error 
-        https://redis.io/commands/ts.create/
-        Args:
-            key_name (str): name of key
-            retention_secs (int, optional): retention in seconds. Defaults to 0(unlimited).
-            duplicate_policy (str, optional): Can be one of: block, first, last, min max. Defaults to 'last'.
-            labels (dict, optional): metadata lebels. Defaults to None.
-        """
-        self.ts.create(
-            key=key_name,
-            retention_msecs=retention_secs * 1000,
-            duplicate_policy=duplicate_policy,
-            labels=labels
-        )
-
-
     def clear_data(self, c1:str, c2:str, from_timestamp=0, to_timestamp=None):
         """Clear all data in a range
         WARNING:
@@ -236,13 +247,14 @@ class RedisTimeseriesManager:
             return False, str(e)
     
 
-    def add_line(self, line:str, default_value:float=0.0):
+    def add_line(self, line:str, default_value:float=0.0, extra_labels:dict=None):
         """Add a line to the series
         Notice:
             - After runnig this method, add `line` name to `_lines`
         Args:
             line (str): line
             default_value (float, optional): default value, new line will be filled with this value. Defaults to 0.0.
+            extra_labels(dict, optional): set extra labels for the new created line
         Returns:
             tuple: (success:bool, message:str)
         """
@@ -258,7 +270,7 @@ class RedisTimeseriesManager:
                 # looping per c2
                 for c2 in c2_list:
                     # creating lines for all timeframes
-                    self._create_tseries(c1, c2, new_line=line)
+                    self._create_tseries(c1, c2, new_line=line, extra_labels=extra_labels)
                     # filling new lines with default value
                     self._reset_line_values(c1, c2, line, default_value)
             # creating rules for the new line
@@ -290,7 +302,7 @@ class RedisTimeseriesManager:
             return False, str(e)
 
 
-    def add(self, data:list, c1:str, c2:str=None, c2_position:int=None, timeframe:str=None, create_inplace:bool=False):
+    def add(self, data:list, c1:str, c2:str=None, c2_position:int=None, timeframe:str=None, create_inplace:bool=False, extra_labels:dict=None):
         """Add data records
             If c2 is not provided, it means that it resides inside the data at position `c2_position`
         Args:
@@ -300,6 +312,7 @@ class RedisTimeseriesManager:
             c2_position (int, optional): position of c2 inside data. Must be provided if c2 is not provided.
             timeframe (str, optional): timeframe. Defaults to 1st(shortest) timeframe. Please note that you shouldn't add data directly to `compressed` timeframes. So using this parameter is prohibited.
             create_inplace (bool, optional): Create ts map if does not exist. Defaults to False.
+            extra_labels (dict, optional): Extra lables for the new created ts map when `create_implace` is True.
         Returns:
             tuple: (success:bool, insertedDataLength:int or error:str)
         """
@@ -313,7 +326,7 @@ class RedisTimeseriesManager:
             output = []
             if c2 and not self.map_exists(c1, c2):
                 if create_inplace:
-                    self.create(c1, c2)
+                    self.create(c1, c2, extra_labels)
                 else:
                     raise Exception(f"Map {c1}:{c2} does not exist.")
             if type(data[0]) not in [list, tuple]:
@@ -323,7 +336,7 @@ class RedisTimeseriesManager:
                     c2 = d.pop(c2_position)
                     if not self.map_exists(c1, c2):
                         if create_inplace:
-                            self.create(c1, c2)
+                            self.create(c1, c2, extra_labels)
                         else:
                             raise Exception(f"Map {c1}:{c2} does not exist.")
                 for idx, line in enumerate(self._lines):
@@ -337,8 +350,8 @@ class RedisTimeseriesManager:
 
     def read(
             self,
-            c1:str,
-            c2:str,
+            c1:Union[str, dict],
+            c2:Union[str, dict],
             timeframe:str=None,
             from_timestamp:int=None,
             to_timestamp:int=None,
@@ -350,8 +363,8 @@ class RedisTimeseriesManager:
         ):
         """Read records based on conditions
         Args:
-            c1 (str): c1
-            c2 (str): c2
+            c1 (str|dict): c1 classifier or a dictionary containing label filters
+            c2 (str|dict): c2 classifier or a dictionary containing label filters
             timeframe (str, optional): timeframe. Defaults to 1st timeframe.
             from_timestamp (int, optional): Defaults to 0.
             to_timestamp (int, optional): Defaults to timestamp of current time.
@@ -363,15 +376,18 @@ class RedisTimeseriesManager:
         Returns:
             Any: list|df|raw of data like [`timestamp(secs)`, `line1`, `line2`, ...]
         """
-        c1 = c1.lower()
-        c2 = c2.lower()
-        timeframe= timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
-        if from_timestamp and type(from_timestamp) is int:
-            from_timestamp = from_timestamp*1000 if from_timestamp_inclusive else (from_timestamp+1)*1000
-        else:
-            from_timestamp = '-'
-        to_timestamp = to_timestamp*1000 if to_timestamp and type(to_timestamp) is int else '+'
         try:
+            timeframe= timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
+            labels = {
+                'timeframe': timeframe
+            }
+            self._add_classifier_label(labels, 'c1', c1)
+            self._add_classifier_label(labels, 'c2', c2)
+            if from_timestamp and type(from_timestamp) is int:
+                from_timestamp = from_timestamp*1000 if from_timestamp_inclusive else (from_timestamp+1)*1000
+            else:
+                from_timestamp = '-'
+            to_timestamp = to_timestamp*1000 if to_timestamp and type(to_timestamp) is int else '+'
             if extra_records:
                 adjust_key_name = self._get_key_name(c1, c2, timeframe, list(self._timeframes.keys()))[0]
                 from_timestamp = self._adjust_from_timestamp(adjust_key_name, from_timestamp, extra_records, timestamp_minimum_boundary)
@@ -379,11 +395,7 @@ class RedisTimeseriesManager:
                 from_time=from_timestamp,
                 to_time=to_timestamp,
                 with_labels=True,
-                filters = self._create_filters(
-                    c1=c1,
-                    c2=c2,
-                    timeframe=timeframe
-                )
+                filters = self.create_filters(**labels)
             )
             # raw data is now collected; redis would already has raised exception in case of error
             return self._prepare_read_data(data=raw, line_order=line_order, return_as=return_as)
@@ -393,110 +405,115 @@ class RedisTimeseriesManager:
 
 
     def read_last_n_records(
-            self, c1:str, c2:str,
-            *,
-            timeframe:str=None,
+            self,
+            c1:Union[str, dict],
+            c2:Union[str, dict],
             n:int,
+            timeframe:str=None,
             minimum_timestamp:int=None,
             line_order:list=None,
             return_as:str = 'list'
         ):
         """read the last n records
         Args:
-            c1 (str): c1
-            c2 (str): symbol
+            c1 (str|dict): c1 classifier or a dictionary containing label filters
+            c2 (str|dict): c2 classifier or a dictionary containing label filters
+            n (int): The intended number of records from the last
             timeframe (str): timeframe. Defaults to 1st timeframe.
-            n (int): The number of required records
-            minimum_timestamp (int, optional): The minimum timestap(secs) of valid record. If not provided, an optimized value will be chosen based on timeframe.
+            minimum_timestamp (int|`optimized`, optional): The minimum timestamp(secs) of valid record. If not provided it means unlimited; Set to 'optimized' so that an optimized value will be chosen based on timeframe.
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
             return_as(str, optional): Set the output format(default format is `list`). Available options are `list', 'df' and 'raw'
         Returns:
             tuple: success(bool), records_are_enough(bool), records(list|df|raw)
         """
-        c1 = c1.lower()
-        c2 = c2.lower()
-        timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
-        # to_timestamp = int(time.time()) * 1000
-        minimum_timestamp = minimum_timestamp * 1000 if minimum_timestamp is not None else self._get_optimized_from_timestamp(timeframe, n)
-        #output vars
-        records_are_enough = False
         try:
-            adjust_key_name = self._get_key_name(c1, c2, timeframe, self._lines[0])
-            #the ts function immediately raises exception in case of error. e.g. key not found
-            result = self.ts.revrange(
-                key=adjust_key_name,
-                from_time=minimum_timestamp,
-                to_time='+',
-                count=n,
+            timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
+            labels = {
+                'timeframe': timeframe,
+            }
+            self._add_classifier_label(labels, 'c1', c1)
+            self._add_classifier_label(labels, 'c2', c2)
+            if minimum_timestamp == 'optimized':
+                minimum_timestamp = self.get_optimized_from_timestamp(timeframe, n)
+            elif type(minimum_timestamp) is int and minimum_timestamp > 0:
+                minimum_timestamp = minimum_timestamp * 1000
+            else:
+                minimum_timestamp = 0
+            records_are_enough = False
+            success, data_count, pivot_timestamp = self.find_last_nth_timestamp(
+                filters=self.create_filters(**{**labels, 'line': self._lines[0]}),
+                n=n,
+                from_timestamp=minimum_timestamp,
             )
-            data_count = len(result)
-            if data_count < 1:
-                return True, False, []
-            # records_are_enough = True if data_count == n else False
-            from_timestamp = result[-1][0]
+            if not success:
+                raise Exception(pivot_timestamp)
+            if data_count == n:
+                records_are_enough = True
             # everything is ready to fetch actual data
             raw = self.ts.mrange(
-                from_time=from_timestamp,
+                from_time=pivot_timestamp,
                 to_time='+',
                 with_labels=True,
-                filters = self._create_filters(
-                    c1=c1,
-                    c2=c2,
-                    timeframe=timeframe
-                )
+                filters = self.create_filters(**labels)
             )
             # raw data is now collected; redis would already has raised exception in case of error
             success, data = self._prepare_read_data(data=raw, line_order=line_order, return_as=return_as)
             if not success:
                 raise Exception(data)
-            data_len = len(data) if return_as != 'raw' else data_count # #todo fix: data_count shouldn't be used here
-            records_are_enough = True if data_len == n else False
+            # data_len = len(data) if return_as != 'raw' else data_count # #todo fix: data_count shouldn't be used here
+            # records_are_enough = True if data_len == n else False
             return True, records_are_enough, data
-        except Exception as e:
-            return False, False, str(e)
+        except Exception as ex:
+            return False, False, str(ex)
 
 
     def read_last_nth_record(
             self,
-            c1:str,
-            c2:str,
-            *,
-            timeframe:str=None,
+            c1:Union[str, dict],
+            c2:Union[str, dict],
             n:int,
+            timeframe:str=None,
             minimum_timestamp:int=None,
             line_order:list=None,
             return_as:str = 'list'
         ):
         """return the last nth record
         Args:
-            c1 (str): c1
-            c2 (str): c2
-            timeframe (str): timeframe. Defaults to 1st timeframe.
+            c1 (str|dict): c1 classifier or a dictionary containing label filters
+            c2 (str|dict): c2 classifier or a dictionary containing label filters
             n (int): The position
-            minimum_timestamp (int, optional): The minimum timestap(secs) of valid record. If not provided, an optimized value will be chosen based on timeframe.
+            timeframe (str): timeframe. Defaults to 1st timeframe.
+            minimum_timestamp (int|`optimized`, optional): The minimum timestamp(secs) of valid record. If not provided it means unlimited; Set to 'optimized' so that an optimized value will be chosen based on timeframe.
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
             return_as(str, optional): Set the output format(default format is `list`). Available options are `list', 'df' and 'raw'
 
         Returns:
             tuple: position_exists(bool), record(list|df|raw)
         """
-        c1 = c1.lower()
-        c2 = c2.lower()
-        timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
-        to_timestamp = int(time.time()) * 1000
-        minimum_timestamp = minimum_timestamp * 1000 if minimum_timestamp is not None else self._get_optimized_from_timestamp(timeframe, n)
         try:
-            adjust_key_name = self._get_key_name(c1, c2, timeframe, self._lines[0])
-            result = self.ts.revrange(
-                key=adjust_key_name,
-                from_time=minimum_timestamp,
-                to_time=to_timestamp,
-                count=n,
+            timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
+            labels = {
+                'timeframe': timeframe,
+            }
+            self._add_classifier_label(labels, 'c1', c1)
+            self._add_classifier_label(labels, 'c2', c2)
+            if minimum_timestamp == 'optimized':
+                minimum_timestamp = self.get_optimized_from_timestamp(timeframe, n)
+            elif type(minimum_timestamp) is int and minimum_timestamp > 0:
+                minimum_timestamp = minimum_timestamp * 1000
+            else:
+                minimum_timestamp = 0
+            success, data_count, pivot_timestamp = self.find_last_nth_timestamp(
+                filters=self.create_filters(**{**labels, 'line': self._lines[0]}),
+                n=n,
+                from_timestamp=minimum_timestamp,
             )
-            data_count = len(result)
+            if not success:
+                raise Exception(pivot_timestamp)
             if data_count < 1 or data_count < n:
-                raise Exception(f"Could not locate record at position {n} from last; make sure `minimum_timestamp` is not accidentally limiting the data range(you can set it to `0`")
-            target_timestamp = int(result[-1][0] / 1000)
+                raise Exception(f"Could not locate record at position {n} from last")
+            # everything is ready to fetch actual data
+            target_timestamp = int(pivot_timestamp / 1000)
             success, record = self.read(
                 c1,
                 c2,
@@ -504,6 +521,7 @@ class RedisTimeseriesManager:
                 from_timestamp=target_timestamp,
                 to_timestamp=target_timestamp,
                 timestamp_minimum_boundary=0,
+                from_timestamp_inclusive=True,
                 line_order=line_order,
                 return_as=return_as
             )
@@ -522,6 +540,7 @@ class RedisTimeseriesManager:
     def read_last(self, c1:str=None, c2:str=None, timeframe:str=None, line_order:list=None, return_as:str='list'):
         """read the last record
             If exactly the last record is required, this performs faster than read_last_nth_record(n=1)
+            Notice: This method only supports string classifiers right now; #TODO
         """
         try:
             timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
@@ -560,6 +579,7 @@ class RedisTimeseriesManager:
         """Find the last value inserted into timeseries; can be filtered by the parameters given
         This is implemented differently from read_last() and is based on labels; used primarily to check if a record already exists and fetch the intended value concurrently
         Note that this method only returns the value of a single line(and also the timestamp).
+        Notice: This method only supports string classifiers right now; #TODO
         Args:
             c1 (str, optional): c1. Set c1 filter.
             c2 (str, optional): c1. Set c2 filter.
@@ -569,7 +589,7 @@ class RedisTimeseriesManager:
             tuple: result_found(bool), result(dict)
         """
         try:
-            filters = self._create_filters(
+            filters = self.create_filters(
                 c1=c1,
                 c2=c2,
                 line=line,
@@ -599,6 +619,26 @@ class RedisTimeseriesManager:
 
     ########COMMON/PRIVATE METHODS############
 
+    def find_last_nth_timestamp(self, filters:dict, n:int, from_timestamp:int=0):
+        try:
+            results = self.ts.mrevrange(
+                from_time=from_timestamp,
+                to_time='+',
+                filters=filters,
+                count=n,
+                with_labels=True,
+            )
+            if len(results) > 1:
+                raise Exception(f"Inadequate filters: Apply all labels on classifiers to filter out data properly")
+            if len(results) < 1:
+                raise Exception(f"Could not locate data based on provided filters")
+            results = list(results[0].values())[0][1]
+            pivot_ts = results[-1][0]
+            return True, len(results), pivot_ts
+        except Exception as ex:
+            return False, False, str(ex)
+
+
     def query_index(self, c1:str=None, c2:str=None, line:str=None, timeframe:str=None, return_key_names:bool=False):
         """query the key index
         Args:
@@ -617,7 +657,7 @@ class RedisTimeseriesManager:
             'line': set(),
         }
         try:
-            filters = self._create_filters(
+            filters = self.create_filters(
                 c1=c1,
                 c2=c2,
                 line=line,
@@ -691,6 +731,23 @@ class RedisTimeseriesManager:
     ######## CLASS & STATIC METHODS ################################
 
     @classmethod
+    def create_filters(cls, **kwargs):
+        filters = [f'tl={cls._name}']
+        for filter_name, filter_value in kwargs.items():
+            if filter_value is not None:
+                filters.append(f"{filter_name}={filter_value}")
+        return filters
+    
+
+    @staticmethod
+    def _add_classifier_label(labels:dict, classifier:str, value:Union[str, dict]):
+        if type(value) is str:
+            labels[classifier] = value.lower()
+        elif type(value) is dict:
+            labels.update(value)
+
+
+    @classmethod
     def _get_key_name(cls, c1, c2, timeframe, line):
         return f'{cls._name}:{c1}:{c2}:{timeframe}:{line}'
 
@@ -700,16 +757,6 @@ class RedisTimeseriesManager:
         timeframe = list(cls._timeframes.keys())[0]
         line = cls._lines[0] if not line else line
         return f'{cls._name}:{c1}:{c2}:{timeframe}:{line}'
-
-
-    @classmethod
-    def _create_filters(cls, **kwargs):
-        filter_options = ['c1', 'c2', 'line', 'timeframe']
-        filters = [f'tl={cls._name}']
-        for filter in filter_options:
-            if filter in kwargs and kwargs[filter] is not None:
-                filters.append(f"{filter}={kwargs[filter]}")
-        return filters
 
 
     @classmethod
@@ -727,6 +774,8 @@ class RedisTimeseriesManager:
             for i in data:
                 for k, v in i.items():
                     line = v[0]['line']
+                    if line in data_lines:
+                        raise Exception(f"Inadequate filters: Multiple lines with the same name are returned. This generally happens when label filters are used as classifiers and labels are not enough. Please add all labels to filter out data properly.")
                     data_lines[line] = v[1]
             if return_as == 'raw':
                 return True, data_lines
@@ -778,7 +827,7 @@ class RedisTimeseriesManager:
     
 
     @staticmethod
-    def _get_optimized_from_timestamp(timeframe:str, record_count:int):
+    def get_optimized_from_timestamp(timeframe:str, record_count:int):
         days = 1
         if timeframe in ['raw', '1m']:
             days = math.ceil(record_count / 24) * 2

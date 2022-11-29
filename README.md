@@ -22,6 +22,8 @@ To install RedisTimeseriesManager, run the following command:
 To get started, simply create a class that inherits from `RedisTimeseriesManager`. Then set the properties `_name`, `_lines`, and `_timeframes`.
 
 ```python
+from redis_timeseries_manager import RedisTimeseriesManager
+
 class Test(RedisTimeseriesManager):
     _name = 'test'
     _lines = ['l1', 'l2']
@@ -128,6 +130,93 @@ _timeframes = {
 ```
 In the above example, the `1d` timeframe is isolated and no compaction rule will have interaction with that. Data can be inserted into this timeframe using `add(c1=..., timeframe='1d')`
 One usage may be in the case that you want to keep track and maintain the minute data but have a separate data source for daily data. Keep in mind that you should never write data directly into the timeframes that the result of compaction rules are written. In the above example, the `1m`(default) and `1d` timeframes are safe to write directly.
+
+
+# Usage with more than two classifiers
+
+In most use cases, two classifiers for the data must be enough; while there might be scenarios where more than two classifiers for the data are required. In such cases, you can extend the classifiers in `c1` or `c2` classifier.
+
+As of version 2.1, redis_timeseries_manager supports `extra_labels` that gives the ability to set custom labels for the data. The main advantage of labels in redis timeseries emerges when you utilize them with *redis multi-timeseries commands* like [TS.MRANGE](https://redis.io/commands/ts.mrange/)
+
+The extending process consist of two parts: First we have to provide a unique identifier as the classifier and secondly provide the corresponding labels that identify the data as `extra_labels`. 
+
+For better clarification, suppose a scenaro where we are required to store performance of several users who are optimizing strategies on given sample data. In this case we need 4 different classifiers and we have to extend additional ones in a classifier like `c2`.
+
+Here is the full example:
+
+```python
+from redis_timeseries_manager import RedisTimeseriesManager
+
+class Measurements(RedisTimeseriesManager):
+    _name = 'feature_tests'
+    _lines = ['l1', 'l2']
+    _timeframes = {
+        'raw': {'retention_secs': 100000}
+    }
+
+settings = {
+    'host': 'localhost',
+    'port': 6379,
+    'db': 0,
+    'password': None,
+}
+
+tl = Measurements(**settings)
+
+tl.add(
+    data=[
+        [123456, 7, 8],
+        [123457, 9, 10],
+        [123458, 11, 12],
+        [123459, 13, 14],
+    ],
+    c1='performance',
+    c2='u_1_22_46',
+    extra_labels={
+        'user_id': 1,
+        'strategy_id': 22,
+        'sample_id': 46
+    },
+    create_inplace=True,
+)
+tl.add(
+    data=[
+        [123456, 17, 18],
+        [123457, 19, 110],
+        [123458, 111, 112],
+        [123460, 113, 114],
+    ],
+    c1='performance',
+    c2='u_2_22_46',
+    extra_labels={
+        'user_id': 2,
+        'strategy_id': 22,
+        'sample_id': 46
+    },
+    create_inplace=True,
+)
+```
+
+Later, to read data, we have to provide the full labels we have decided to define(and differentiate) the data with, in place of using a plain `c2` classifier:
+
+```python
+tl.read(
+    c1='performance',
+    c2={
+        'user_id': 2,
+        'strategy_id': 22,
+        'sample_id': 46
+    },
+    return_as='df'
+)
+```
+
+| | time | l1 | l2 |
+| - | ------ | ----- | ----- |
+| 0 | 123456 | 17.0 | 18.0 |
+| 1 | 123457 | 19.0 | 110.0 |
+| 2 | 123458 | 111.0 | 112.0 |
+| 3 | 123460 | 113.0 | 114.0 |
 
 
 
