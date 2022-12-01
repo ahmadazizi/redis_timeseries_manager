@@ -359,6 +359,7 @@ class RedisTimeseriesManager:
             timestamp_minimum_boundary:int=None,
             from_timestamp_inclusive:bool = True,
             line_order:list=None,
+            allow_multiple:bool=False,
             return_as:str = 'list'
         ):
         """Read records based on conditions
@@ -372,6 +373,7 @@ class RedisTimeseriesManager:
             timestamp_minimum_boundary (int, optional): When extra_records set, this limits how much from_timestamp can decline. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
             from_timestamp_inclusive(bool, optional): If enabled, the output range will include the from_timestamp data. Default enabled
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
+            allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
             return_as(str, optional): Set the output format(default format is `list`). Available options are `list', 'df' and 'raw'
         Returns:
             Any: list|df|raw of data like [`timestamp(secs)`, `line1`, `line2`, ...]
@@ -398,7 +400,7 @@ class RedisTimeseriesManager:
                 filters = self.create_filters(**labels)
             )
             # raw data is now collected; redis would already has raised exception in case of error
-            return self._prepare_read_data(data=raw, line_order=line_order, return_as=return_as)
+            return self._prepare_read_data(data=raw, line_order=line_order, allow_multiple=allow_multiple, return_as=return_as)
         except Exception as e:
             message = f"Failed to read from `{c1}:{c2}` -> {e}"
             return False, message
@@ -412,6 +414,7 @@ class RedisTimeseriesManager:
             timeframe:str=None,
             minimum_timestamp:int=None,
             line_order:list=None,
+            allow_multiple:bool=False,
             return_as:str = 'list'
         ):
         """read the last n records
@@ -422,6 +425,7 @@ class RedisTimeseriesManager:
             timeframe (str): timeframe. Defaults to 1st timeframe.
             minimum_timestamp (int|`optimized`, optional): The minimum timestamp(secs) of valid record. If not provided it means unlimited; Set to 'optimized' so that an optimized value will be chosen based on timeframe.
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
+            allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
             return_as(str, optional): Set the output format(default format is `list`). Available options are `list', 'df' and 'raw'
         Returns:
             tuple: success(bool), records_are_enough(bool), records(list|df|raw)
@@ -457,7 +461,7 @@ class RedisTimeseriesManager:
                 filters = self.create_filters(**labels)
             )
             # raw data is now collected; redis would already has raised exception in case of error
-            success, data = self._prepare_read_data(data=raw, line_order=line_order, return_as=return_as)
+            success, data = self._prepare_read_data(data=raw, line_order=line_order, allow_multiple=allow_multiple, return_as=return_as)
             if not success:
                 raise Exception(data)
             # data_len = len(data) if return_as != 'raw' else data_count # #todo fix: data_count shouldn't be used here
@@ -475,6 +479,7 @@ class RedisTimeseriesManager:
             timeframe:str=None,
             minimum_timestamp:int=None,
             line_order:list=None,
+            allow_multiple:bool=False,
             return_as:str = 'list'
         ):
         """return the last nth record
@@ -485,6 +490,7 @@ class RedisTimeseriesManager:
             timeframe (str): timeframe. Defaults to 1st timeframe.
             minimum_timestamp (int|`optimized`, optional): The minimum timestamp(secs) of valid record. If not provided it means unlimited; Set to 'optimized' so that an optimized value will be chosen based on timeframe.
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
+            allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
             return_as(str, optional): Set the output format(default format is `list`). Available options are `list', 'df' and 'raw'
 
         Returns:
@@ -523,6 +529,7 @@ class RedisTimeseriesManager:
                 timestamp_minimum_boundary=0,
                 from_timestamp_inclusive=True,
                 line_order=line_order,
+                allow_multiple=allow_multiple,
                 return_as=return_as
             )
             if not success:
@@ -765,7 +772,9 @@ class RedisTimeseriesManager:
 
 
     @classmethod
-    def _prepare_read_data(cls, data, line_order=None, return_as:str='list'):
+    def _prepare_read_data_basic(cls, data, line_order=None, return_as:str='list'):
+        """DEPRECATED, WILL BE REMOVED
+        """
         try:
             line_order = line_order or cls._lines
             if not data:
@@ -788,11 +797,61 @@ class RedisTimeseriesManager:
                 else:
                     df = pd.merge(df, pd.DataFrame(data_lines[line], columns=['time', line]), on='time')
             df['time'] = (df['time']/1000).astype(int)
-            df.set_index('time')
+            df.set_index('time', inplace=True)
             return (True, df) if return_as=="df" else (True, df.values.tolist())
         except Exception as e:
             return False, str(e)
-    
+
+
+    @classmethod
+    def _prepare_read_data(cls, data, line_order=None, allow_multiple:bool=False, return_as:str='list'):
+        try:
+            line_order = line_order or cls._lines
+            if not data:
+                return True, pd.DataFrame([], columns=['time', *line_order]) if return_as == 'df' else []
+            data_sets = dict()
+            for d in data:
+                for key, val in d.items():
+                    labels = val[0]
+                    line = labels['line']
+                    data_points = val[1]
+                    sig = f"{labels['c1']}_{labels['c2']}"
+                    data_sets.setdefault(sig, {'_lines': 0})
+                    data_sets[sig][line] = data_points
+                    data_sets[sig]['_lines'] += 1
+                    if not allow_multiple and len(data_sets) > 1:
+                        raise Exception(f"Inadequate filters")
+            if return_as == 'raw':
+                return True, data_sets
+            # mergins lines
+            data_frames = {}
+            for data_name, lines_data in data_sets.items():
+                if(lines_data['_lines'] != len(cls._lines)):
+                    raise Exception('len mismatch')
+                data_frames[data_name]:pd.DataFrame = None
+                for line in line_order:
+                    if not line in lines_data:
+                        raise Exception(f"Missing data for the line `{line}`")
+                    if data_frames[data_name] is None:
+                        data_frames[data_name] = pd.DataFrame(lines_data[line], columns=['time', line])
+                    else:
+                        data_frames[data_name] = pd.merge(data_frames[data_name], pd.DataFrame(lines_data[line], columns=['time', line]), on='time')
+            # concating data sets
+            df:pd.DataFrame = None
+            for name, frame in data_frames.items():
+                if df is None:
+                    df = frame
+                else:
+                    df = pd.concat([df, frame])
+            # finalizing output
+            df['time'] = (df['time']/1000).astype(int)
+            if len(data_sets) > 1:
+                df.sort_values(by='time', inplace=True, ignore_index=True)
+            df.set_index('time', inplace=True)
+            return (True, df) if return_as=="df" else (True, df.values.tolist())
+        except Exception as e:
+            return False, str(e)
+
 
     @staticmethod
     def _get_read_length(data, data_type:str):
