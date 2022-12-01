@@ -302,7 +302,7 @@ class RedisTimeseriesManager:
             return False, str(e)
 
 
-    def add(self, data:list, c1:str, c2:str=None, c2_position:int=None, timeframe:str=None, create_inplace:bool=False, extra_labels:dict=None):
+    def add(self, data:list, c1:str, c2:str=None, c2_position:int=None, extra_labels:dict=None, timeframe:str=None, create_inplace:bool=False):
         """Add data records
             If c2 is not provided, it means that it resides inside the data at position `c2_position`
         Args:
@@ -310,9 +310,9 @@ class RedisTimeseriesManager:
             c1 (str): classifier 1
             c2 (str, optional): classifier 2. If c2 is not provided, it means that it resides inside data at position `c2_position`
             c2_position (int, optional): position of c2 inside data. Must be provided if c2 is not provided.
+            extra_labels (dict, optional): Extra lables for the new created ts map when `create_implace` is True.
             timeframe (str, optional): timeframe. Defaults to 1st(shortest) timeframe. Please note that you shouldn't add data directly to `compressed` timeframes. So using this parameter is prohibited.
             create_inplace (bool, optional): Create ts map if does not exist. Defaults to False.
-            extra_labels (dict, optional): Extra lables for the new created ts map when `create_implace` is True.
         Returns:
             tuple: (success:bool, insertedDataLength:int or error:str)
         """
@@ -816,9 +816,9 @@ class RedisTimeseriesManager:
                     line = labels['line']
                     data_points = val[1]
                     sig = f"{labels['c1']}_{labels['c2']}"
-                    data_sets.setdefault(sig, {'_lines': 0})
-                    data_sets[sig][line] = data_points
-                    data_sets[sig]['_lines'] += 1
+                    data_sets.setdefault(sig, {'count': 0, 'labels': labels, 'lines': {}})
+                    data_sets[sig]['lines'][line] = data_points
+                    data_sets[sig]['count'] += 1
                     if not allow_multiple and len(data_sets) > 1:
                         raise Exception(f"Inadequate filters: Multiple lines with the same name are returned. This generally happens when label filters are used as classifiers and labels are not enough. Please add all labels to filter out data properly or turn on the `allow_multiple` option")
             if return_as == 'raw':
@@ -826,16 +826,16 @@ class RedisTimeseriesManager:
             # mergins lines
             data_frames = {}
             for data_name, lines_data in data_sets.items():
-                if(lines_data['_lines'] != len(cls._lines)):
-                    raise Exception(f"Lines mismatch: {lines_data['_lines']} lines of data returned while {len(cls._lines)} lines are expected")
+                if(lines_data['count'] != len(cls._lines)):
+                    raise Exception(f"Lines mismatch: {lines_data['count']} lines of data returned while {len(cls._lines)} lines are expected")
                 data_frames[data_name]:pd.DataFrame = None
                 for line in line_order:
-                    if not line in lines_data:
+                    if not line in lines_data['lines']:
                         raise Exception(f"Missing data for the line `{line}`")
                     if data_frames[data_name] is None:
-                        data_frames[data_name] = pd.DataFrame(lines_data[line], columns=['time', line])
+                        data_frames[data_name] = pd.DataFrame(lines_data['lines'][line], columns=['time', line])
                     else:
-                        data_frames[data_name] = pd.merge(data_frames[data_name], pd.DataFrame(lines_data[line], columns=['time', line]), on='time')
+                        data_frames[data_name] = pd.merge(data_frames[data_name], pd.DataFrame(lines_data['lines'][line], columns=['time', line]), on='time')
             # concating data sets
             df:pd.DataFrame = None
             for name, frame in data_frames.items():
@@ -857,7 +857,8 @@ class RedisTimeseriesManager:
     def _get_read_length(data, data_type:str):
         try:
             if data_type == "raw":
-                return len(data[list(data.keys())[0]][list(data[list(data.keys())[0]].keys())[1]])
+                l = data[list(data.keys())[0]]['lines']
+                return len(l[list(l.keys())[0]])
             return len(data)
         except Exception as ex:
             return -1
