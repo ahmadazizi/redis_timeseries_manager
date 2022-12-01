@@ -134,11 +134,11 @@ One usage may be in the case that you want to keep track and maintain the minute
 
 # Usage with more than two classifiers
 
-In most use cases, two classifiers for the data must be enough; while there might be scenarios where more than two classifiers for the data are required. In such cases, you can extend the classifiers in `c1` or `c2` classifier.
+While in most use cases, two classifiers for the data must be enough; there might be scenarios where more than two classifiers for the data are required. In such cases, you can extend the classifiers in `c1` or `c2` classifier.
 
 As of version 2.1, redis_timeseries_manager supports `extra_labels` that gives the ability to set custom labels for the data. The main advantage of labels in redis timeseries emerges when you utilize them with *redis multi-timeseries commands* like [TS.MRANGE](https://redis.io/commands/ts.mrange/)
 
-The extending process consist of two parts: First we have to provide a unique identifier as the classifier and secondly provide the corresponding labels that identify the data as `extra_labels`. 
+The extending process consist of two parts: First we have to provide a unique identifier as the classifier and secondary provide the corresponding labels that identify the data as `extra_labels`. 
 
 For better clarification, suppose a scenaro where we are required to store performance of several users who are optimizing strategies on given sample data. In this case we need 4 different classifiers and we have to extend additional ones in a classifier like `c2`.
 
@@ -211,13 +211,38 @@ tl.read(
 )
 ```
 
-| | time | l1 | l2 |
-| - | ------ | ----- | ----- |
-| 0 | 123456 | 17.0 | 18.0 |
-| 1 | 123457 | 19.0 | 110.0 |
-| 2 | 123458 | 111.0 | 112.0 |
-| 3 | 123460 | 113.0 | 114.0 |
+| time | l1	| l2 |
+| ------ | ----- | ----- |
+| 123456 | 17.0 | 18.0 |
+| 123457 | 19.0 | 10.0 |
+| 123458 | 111.0 | 112.0 |
+| 123460 | 113.0 | 114.0 |
 
+If we don't provide the full labels, multiple data-points with the same `time` might return and this is usually not we expect from a timeseries data and that's why `RedisTimeseriesManager` by default prevents this to happen. However if you persist, you can turn the `allow_multiple` option on to let multiple data sets to be combined together. 
+
+In our exampe, if you wanted all the entries for the `strategy_id` of 22, you can do as following:
+
+```python
+tl.read(
+    c1='performance',
+    c2={
+        'strategy_id': 22,
+    },
+    allow_multiple=True,
+    return_as='df'
+)
+```
+
+| time | l1 | l2 |
+| ------ | ----- | ----- |
+| 123456 | 7.0 | 8.0 |
+| 123456 | 17.0 | 18.0 |
+| 123457 | 9.0 | 10.0 |
+| 123457 | 19.0 | 110.0 |
+| 123458 | 11.0 | 12.0 |
+| 123458 | 111.0 | 112.0 |
+| 123459 | 13.0 | 14.0 |
+| 123460 | 113.0 | 114.0 |
 
 
 # Advanced Usage Examples

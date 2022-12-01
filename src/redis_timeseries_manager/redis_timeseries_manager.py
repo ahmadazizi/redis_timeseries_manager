@@ -820,14 +820,14 @@ class RedisTimeseriesManager:
                     data_sets[sig][line] = data_points
                     data_sets[sig]['_lines'] += 1
                     if not allow_multiple and len(data_sets) > 1:
-                        raise Exception(f"Inadequate filters")
+                        raise Exception(f"Inadequate filters: Multiple lines with the same name are returned. This generally happens when label filters are used as classifiers and labels are not enough. Please add all labels to filter out data properly or turn on the `allow_multiple` option")
             if return_as == 'raw':
                 return True, data_sets
             # mergins lines
             data_frames = {}
             for data_name, lines_data in data_sets.items():
                 if(lines_data['_lines'] != len(cls._lines)):
-                    raise Exception('len mismatch')
+                    raise Exception(f"Lines mismatch: {lines_data['_lines']} lines of data returned while {len(cls._lines)} lines are expected")
                 data_frames[data_name]:pd.DataFrame = None
                 for line in line_order:
                     if not line in lines_data:
@@ -855,9 +855,12 @@ class RedisTimeseriesManager:
 
     @staticmethod
     def _get_read_length(data, data_type:str):
-        if data_type == "raw":
-            return len(data[list(data.keys())[0]])
-        return len(data)
+        try:
+            if data_type == "raw":
+                return len(data[list(data.keys())[0]][list(data[list(data.keys())[0]].keys())[1]])
+            return len(data)
+        except Exception as ex:
+            return -1
 
 
     @staticmethod
