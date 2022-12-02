@@ -110,7 +110,7 @@ t.read(
 
 There are also some other methods to read or investigate about the data. `read_last_n_records()`, `read_last_nth_record()`, `read_last()` and `find_last()` are those methods. 
 
-Since v2.0, pandas dataframes are supported. You can choose the format of output data when calling read methods. Supported formats are 'list' (python `list`, default format), 'df'(pandas dataframe) or 'raw' which is the raw data read from the timeseries.
+Since v2.0, pandas dataframes are supported. You can choose the format of output data when calling read methods. Supported formats are 'list' (python `list`, default format), 'df'(pandas dataframe), 'sets' (sets of data including lables), 'sets-df' (sets of data only as dataframes, including labels) and 'raw' which is the raw data read from the timeseries.
 
 Some additional parameters can also be used to control what data are read, they include `from_timestamp`, `to_timestamp` and `extra_records`. Refer to the documentations of each method for details.
 
@@ -138,7 +138,7 @@ While in most use cases, two classifiers for the data must be enough; there migh
 
 As of version 2.1, redis_timeseries_manager supports `extra_labels` that gives the ability to set custom labels for the data. The main advantage of labels in redis timeseries emerges when you utilize them with *redis multi-timeseries commands* like [TS.MRANGE](https://redis.io/commands/ts.mrange/)
 
-The extending process consist of two parts: First we have to provide a unique identifier as the classifier and secondary provide the corresponding labels that identify the data as `extra_labels`. 
+The extending process consist of two parts: First we have to provide a unique identifier as the classifier and secondary provide the corresponding labels that identify the data as `extra_labels`. (Do not include timeframe in this process, timeframes are fully handled internally)
 
 For better clarification, suppose a scenaro where we are required to store performance of several users who are optimizing strategies on given sample data. In this case we need 4 different classifiers and we have to extend additional ones in a classifier like `c2`.
 
