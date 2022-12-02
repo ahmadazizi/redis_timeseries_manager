@@ -847,7 +847,7 @@ class RedisTimeseriesManager:
             df['time'] = (df['time']/1000).astype(int)
             if len(data_sets) > 1:
                 df.sort_values(by='time', inplace=True, ignore_index=True)
-            df.set_index('time', inplace=True)
+            # df.set_index('time', inplace=True) # the index column will not be included when converted to list; no need to set time as index
             return (True, df) if return_as=="df" else (True, df.values.tolist())
         except Exception as e:
             return False, str(e)
