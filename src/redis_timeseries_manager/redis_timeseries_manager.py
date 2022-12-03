@@ -374,7 +374,7 @@ class RedisTimeseriesManager:
             from_timestamp_inclusive(bool, optional): If enabled, the output range will include the from_timestamp data. Default enabled
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
             allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
-            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list', 'sets' and 'sets-df'
+            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list`, `dict`, `sets-df`, `sets-list` and `sets-dict`
         Returns:
             Any: list|df|raw of data like [`timestamp(secs)`, `line1`, `line2`, ...]
         """
@@ -426,7 +426,7 @@ class RedisTimeseriesManager:
             minimum_timestamp (int|`optimized`, optional): The minimum timestamp(secs) of valid record. If not provided it means unlimited; Set to 'optimized' so that an optimized value will be chosen based on timeframe.
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
             allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
-            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list', 'sets' and 'sets-df'
+            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list`, `dict`, `sets-df`, `sets-list` and `sets-dict`
         Returns:
             tuple: success(bool), records_are_enough(bool), records(list|df|raw)
         """
@@ -491,7 +491,7 @@ class RedisTimeseriesManager:
             minimum_timestamp (int|`optimized`, optional): The minimum timestamp(secs) of valid record. If not provided it means unlimited; Set to 'optimized' so that an optimized value will be chosen based on timeframe.
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
             allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
-            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list', 'sets' and 'sets-df'
+            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list`, `dict`, `sets-df`, `sets-list` and `sets-dict`
 
         Returns:
             tuple: position_exists(bool), record(list|df|raw)
@@ -812,8 +812,8 @@ class RedisTimeseriesManager:
             data_sets = dict()
             for d in data:
                 for key, val in d.items():
-                    labels = val[0]
-                    line = labels['line']
+                    labels:dict = val[0]
+                    line = labels.pop('line')
                     data_points = val[1]
                     sig = f"{labels['c1']}_{labels['c2']}"
                     data_sets.setdefault(sig, {'count': 0, 'labels': labels, 'lines': {}})
@@ -836,11 +836,16 @@ class RedisTimeseriesManager:
                     else:
                         data_sets[data_name]['df'] = pd.merge(data_sets[data_name]['df'], pd.DataFrame(lines_data['lines'][line], columns=['time', line]), on='time')
             if 'sets' in return_as:
+                output = []
                 for s in data_sets.keys():
                     data_sets[s]['df']['time'] = (data_sets[s]['df']['time']/1000).astype(int)
                     if return_as == 'sets-df':
-                        del(data_sets[s]['lines'])
-                return True, data_sets
+                        output.append((data_sets[s]['labels'], data_sets[s]['df']))
+                    elif return_as == 'sets-dict':
+                        output.append((data_sets[s]['labels'], data_sets[s]['df'].to_dict('list')))
+                    else:
+                        output.append((data_sets[s]['labels'], data_sets[s]['df'].values.tolist()))
+                return True, output
             # concating data sets
             df:pd.DataFrame = None
             for name, dataset in data_sets.items():
@@ -853,7 +858,11 @@ class RedisTimeseriesManager:
             if len(data_sets) > 1:
                 df.sort_values(by='time', inplace=True, ignore_index=True)
             # df.set_index('time', inplace=True) # the index column will not be included when converted to list; no need to set time as index
-            return (True, df) if return_as=="df" else (True, df.values.tolist())
+            if return_as == 'df':
+                return True, df
+            elif return_as == 'dict':
+                return True, df.to_dict('list')
+            return True, df.values.tolist()
         except Exception as e:
             return False, str(e)
 
@@ -865,8 +874,11 @@ class RedisTimeseriesManager:
                 l = data[list(data.keys())[0]]['lines']
                 return len(l[list(l.keys())[0]])
             elif 'sets' in data_type:
-                df = data[list(data.keys())[0]]['df']
-                return len(df)
+                if data_type == 'sets-dict':
+                    return len(data[0][1]['time'])
+                return len(data[0][1])
+            elif data_type == 'dict':
+                return len(data['time'])
             return len(data)
         except Exception as ex:
             return -1
