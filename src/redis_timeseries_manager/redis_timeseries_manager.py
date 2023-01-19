@@ -534,7 +534,7 @@ class RedisTimeseriesManager:
             )
             if not success:
                 raise Exception(record)
-            record_length = self._get_read_length(record, return_as)
+            record_length = self.get_read_length(record, return_as)
             if record_length != 1:
                 raise Exception(f"Expected exactly one record, {record_length} was returned")
             if return_as != "raw":
@@ -623,6 +623,47 @@ class RedisTimeseriesManager:
             return False, 'No record found'
         except Exception as e:
             return False, str(e)
+
+
+    def update_values(self, c1:str, c2:str, timestamp:int, values:dict):
+        """Update values at an existing timestamp
+        This will only update the provided values at an existing timestamp. Other values will not be touched.
+        Update will be applied on the first timeframe(other timeframes will be updated by compaction rules)
+
+        Args:
+            c1 (str): classifier 1
+            c2 (str): classifier 2
+            timestamp (int): timestamp with existing values
+            values (dict): key-value pairs of updating data, Every key must be a valid line
+
+
+        Returns:
+            tuple: (success:bool, message:str)
+        """
+        try:
+            # checking if all provided lines are valid
+            for line in values.keys():
+                if line not in self._lines:
+                    raise Exception(f"The line `{line}` does not exist")
+            success, result = self.read(
+                c1=c1,
+                c2=c2,
+                from_timestamp=timestamp,
+                to_timestamp=timestamp,
+                from_timestamp_inclusive=True,
+                return_as='list'
+            )
+            if not success:
+                raise Exception(result)
+            if len(result) != 1:
+                raise Exception(f"Expected exacly 1 result, {len(result)} was returned")
+            for line, value in values.items():
+                key = self._get_key_name(c1=c1, c2=c2, timeframe=self._get_timeframe_at_position(0), line=line)
+                self.ts.add(key=key, timestamp=timestamp*1000, value=value)
+            return True, f"{len(values)} value(s) has been updated"
+        except Exception as e:
+            return False, str(e)
+
 
     ########COMMON/PRIVATE METHODS############
 
@@ -868,7 +909,7 @@ class RedisTimeseriesManager:
 
 
     @staticmethod
-    def _get_read_length(data, data_type:str):
+    def get_read_length(data, data_type:str):
         try:
             if data_type == "raw":
                 l = data[list(data.keys())[0]]['lines']

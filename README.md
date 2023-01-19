@@ -116,11 +116,17 @@ Some additional parameters can also be used to control what data are read, they 
 
 Since v2.0, pandas dataframes are supported. You can choose the format of output data when calling read methods. Supported formats are 'list' (python `list`, default format), 'df'(pandas dataframe), 'dict' (dictioanry of lines), 'sets-list' (sets of data including lables and lists), 'sets-df' (sets of data  including labels and dataframes), 'sets-dict' (sets of data including labels and dictionary of lines) and 'raw' which is the raw data read from the timeseries.
 
+> [***See a demonstration of supported output formats***](examples/output_formats_demonstration.ipynb)
+
 
 
 # Usage without data compaction
 
 If you do not need data to be compressed across timeframes, you can set only a single timeframe in `_timeframes` class property. This will fully disable compaction functionality; but note that at least one timeframe must be set always.
+
+> ***WARNING:***
+>
+> Due to [an unfixable bug in redis timeseries module](https://github.com/RedisTimeSeries/RedisTimeSeries/issues/1118) only use `db` with index `0` while data compaction is required; otherwise compaction rules won't work.
 
 To have a separate timeframe without data compaction, set `ignore_rules` to `True` in the timeframe definition:
 
