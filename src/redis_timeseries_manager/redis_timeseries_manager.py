@@ -303,7 +303,8 @@ class RedisTimeseriesManager:
 
 
     def add(self, data:list, c1:str, c2:str=None, c2_position:int=None, extra_labels:dict=None, timeframe:str=None, create_inplace:bool=False):
-        """Add data records
+        """THIS METHOD IS OBSOLETE, USE insert() INSTEAD.
+            Add data records
             If c2 is not provided, it means that it resides inside the data at position `c2_position`
         Args:
             data (list): list of lists containing data(To insert a single record, no need to be enclosed in a `list`). Each inner list is as [timestamp, [c2], line1, line2, ...]
@@ -313,6 +314,34 @@ class RedisTimeseriesManager:
             extra_labels (dict, optional): Extra lables for the new created ts map when `create_implace` is True.
             timeframe (str, optional): timeframe. Defaults to 1st(shortest) timeframe. Please note that you shouldn't add data directly to `compressed` timeframes. So using this parameter is prohibited.
             create_inplace (bool, optional): Create ts map if does not exist. Defaults to False.
+        Returns:
+            tuple: (success:bool, insertedDataLength:int or error:str)
+        """
+        return self.insert(
+            data=data,
+            c1=c1,
+            c2=c2,
+            c2_position=c2_position,
+            extra_labels=extra_labels,
+            timeframe=timeframe,
+            create_inplace=create_inplace
+        )
+
+
+    def insert(self, data:list, c1:str, c2:str=None, c2_position:int=None, extra_labels:dict=None, timeframe:str=None, create_inplace:bool=False):
+        """Inserts record(s) of data into series
+            If data with already existing timestamps are provided, the existing data will be overwritten
+            If c2 is not provided, it means that it resides inside the data at position `c2_position`
+
+        Args:
+            data (list): list of lists containing data(To insert a single record, no need to be enclosed in a `list`). Each inner list is as [timestamp, [c2], line1, line2, ...]
+            c1 (str): classifier 1
+            c2 (str, optional): classifier 2. If c2 is not provided, it means that it resides inside data at position `c2_position`
+            c2_position (int, optional): position of c2 inside data. Must be provided if c2 is not provided.
+            extra_labels (dict, optional): Extra lables for the new created ts map when `create_implace` is True.
+            timeframe (str, optional): timeframe. Defaults to 1st(shortest) timeframe. Please note that you shouldn't add data directly to `compressed` timeframes. So using this parameter is prohibited.
+            create_inplace (bool, optional): Create ts map if does not exist. Defaults to False.
+        
         Returns:
             tuple: (success:bool, insertedDataLength:int or error:str)
         """
@@ -346,6 +375,46 @@ class RedisTimeseriesManager:
         except Exception as e:
             message = f"Failed to add to {c1}:{c2} -> {e}"
             return False, message
+
+
+    def update(self, c1:str, c2:str, timestamp:int, values:dict):
+        """Update values at an existing timestamp
+        This will only update the provided values at an existing timestamp. Other values will be untouched.
+        Update will be applied on the first timeframe, other timeframes will be updated by compaction rules(if any)
+
+        Args:
+            c1 (str): classifier 1
+            c2 (str): classifier 2
+            timestamp (int): timestamp with existing values
+            values (dict): key-value pairs of updating data, Every key must be a valid line
+
+
+        Returns:
+            tuple: (success:bool, message:str)
+        """
+        try:
+            # checking if all provided lines are valid
+            for line in values.keys():
+                if line not in self._lines:
+                    raise Exception(f"The line `{line}` does not exist")
+            success, result = self.read(
+                c1=c1,
+                c2=c2,
+                from_timestamp=timestamp,
+                to_timestamp=timestamp,
+                from_timestamp_inclusive=True,
+                return_as='list'
+            )
+            if not success:
+                raise Exception(result)
+            if len(result) != 1:
+                raise Exception(f"Expected exacly 1 result, {len(result)} was returned")
+            for line, value in values.items():
+                key = self._get_key_name(c1=c1, c2=c2, timeframe=self._get_timeframe_at_position(0), line=line)
+                self.ts.add(key=key, timestamp=timestamp*1000, value=value)
+            return True, f"{len(values)} value(s) has been updated"
+        except Exception as e:
+            return False, str(e)
 
 
     def read(
@@ -621,46 +690,6 @@ class RedisTimeseriesManager:
                 final['time'] = int(final['time'] / 1000)
                 return True, final
             return False, 'No record found'
-        except Exception as e:
-            return False, str(e)
-
-
-    def update_values(self, c1:str, c2:str, timestamp:int, values:dict):
-        """Update values at an existing timestamp
-        This will only update the provided values at an existing timestamp. Other values will not be touched.
-        Update will be applied on the first timeframe(other timeframes will be updated by compaction rules)
-
-        Args:
-            c1 (str): classifier 1
-            c2 (str): classifier 2
-            timestamp (int): timestamp with existing values
-            values (dict): key-value pairs of updating data, Every key must be a valid line
-
-
-        Returns:
-            tuple: (success:bool, message:str)
-        """
-        try:
-            # checking if all provided lines are valid
-            for line in values.keys():
-                if line not in self._lines:
-                    raise Exception(f"The line `{line}` does not exist")
-            success, result = self.read(
-                c1=c1,
-                c2=c2,
-                from_timestamp=timestamp,
-                to_timestamp=timestamp,
-                from_timestamp_inclusive=True,
-                return_as='list'
-            )
-            if not success:
-                raise Exception(result)
-            if len(result) != 1:
-                raise Exception(f"Expected exacly 1 result, {len(result)} was returned")
-            for line, value in values.items():
-                key = self._get_key_name(c1=c1, c2=c2, timeframe=self._get_timeframe_at_position(0), line=line)
-                self.ts.add(key=key, timestamp=timestamp*1000, value=value)
-            return True, f"{len(values)} value(s) has been updated"
         except Exception as e:
             return False, str(e)
 

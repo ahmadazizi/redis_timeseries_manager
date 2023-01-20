@@ -42,12 +42,12 @@ At least one timeframe must be provided. Even if you simply want to store timese
 t = Test(host, port, db, password)
 ```
 
-## Adding data  to series
+## Inserting data into series
 
-The method `add()` is used to add data to the series. The syntax is:
+The method `insert()` is used to add data to the series. The syntax is:
 
 ```python
-t.add(data, c1, c2, create_inplace=False)
+t.insert(data, c1, c2, create_inplace=False)
 ```
 
 The format of data is as follows:
@@ -70,7 +70,7 @@ t.create(
 Now we can add data for sensor 1:
 
 ```python
-t.add(
+t.insert(
     data=[
         [123456, 1, 2],
         [123457, 3, 4],
@@ -84,7 +84,7 @@ t.add(
 For the sensor2, we don't want to prepare series explicitly, instead we set `create_inplace` to True and the series will be prepared with the new classifiers implicitely while inserting data:
 
 ```python
-t.add(
+t.insert(
     data=[
         [123456, 7, 8],
         [123457, 9, 10],
@@ -121,16 +121,16 @@ Since v2.0, pandas dataframes are supported. You can choose the format of output
 
 ## Updating data
 
-Lines data at an existing timestamp can be updated individually by taking advantage of `update_values(c1:str, c2:str, timestamp:int, values:dict)` method.
+Lines data at an existing timestamp can be updated individually by taking advantage of `update(c1:str, c2:str, timestamp:int, values:dict)` method.
 
-`values` are key-value pairs of data intended to be updated at the time `timestamp` and all provided `keys` must correspond to an existing `line` in timeseries. If you don't include a line, the value at that line will not be touched. 
+`values` are key-value pairs of data to be updated at the time `timestamp` and all provided `keys` must correspond to an existing `line` in timeseries. If you don't include a line, the value at that line will be untouched. 
 
 Also the update will be applied on the first timeframe and the other timeframes will be updated by compaction rules(if any).
 
 Usage example for update:
 
 ```python
-t.update_values(
+t.update(
     c1='building1',
     c2='sensor2',
     timestamp=123457,
@@ -157,7 +157,7 @@ _timeframes = {
     '1d': {'retention_secs': 60*60*24*365, 'ignore_rules': True},
 }
 ```
-In the above example, the `1d` timeframe is isolated and no compaction rule will have interaction with that. Data can be inserted into this timeframe using `add(c1=..., timeframe='1d')`
+In the above example, the `1d` timeframe is isolated and no compaction rule will have interaction with that. Data can be inserted into this timeframe using `insert(c1=..., timeframe='1d')`
 One usage may be in the case that you want to keep track and maintain the minute data but have a separate data source for daily data. Keep in mind that you should never write data directly into the timeframes that the result of compaction rules are written. In the above example, the `1m`(default) and `1d` timeframes are safe to write directly.
 
 
@@ -192,7 +192,7 @@ settings = {
 
 tl = Measurements(**settings)
 
-tl.add(
+tl.insert(
     data=[
         [123456, 7, 8],
         [123457, 9, 10],
@@ -208,7 +208,7 @@ tl.add(
     },
     create_inplace=True,
 )
-tl.add(
+tl.insert(
     data=[
         [123456, 17, 18],
         [123457, 19, 110],
@@ -383,3 +383,17 @@ class MarketData(RedisTimeseriesManager):
 ```
 
 > [***view the full example and usage***](examples/market_data.ipynb)
+
+
+# Testing
+
+This is not about testing. Life under the shadow of a dictatorial government is terrible. You have to overcome problems that basically does not exist; those that are created by them.
+
+You have no right to protest, because you will be threatened first, if you persist, you will be arrested and punished, and it is not far off to be killed.
+
+The right to free access to information contradicts their nature. They use any means to censor and disrupt the free flow of information.
+Life there requires skills that are less than to imagine. One of these skills is making or using tools to bypass censorship to do your job. Using these tools is like a game of cat and mouse, a new tool works but not forever, you have to take time and keep yourself updated as you will need to use new tools.
+
+What may happen when building a package: You wake up in the morning and find that the internet speed is so terrible that a test that should be done in less than 30 seconds takes 35 minutes.
+
+![image](https://user-images.githubusercontent.com/10188878/213711802-0709a768-68a9-4e4b-ab0d-9c41fe2c5ba2.png)
