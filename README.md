@@ -119,6 +119,26 @@ Since v2.0, pandas dataframes are supported. You can choose the format of output
 > [***See a demonstration of supported output formats***](examples/output_formats_demonstration.ipynb)
 
 
+## Updating data
+
+Lines data at an existing timestamp can be updated individually by taking advantage of `update_values(c1:str, c2:str, timestamp:int, values:dict)` method.
+
+`values` are key-value pairs of data intended to be updated at the time `timestamp` and all provided `keys` must correspond to an existing `line` in timeseries. If you don't include a line, the value at that line will not be touched. 
+
+Also the update will be applied on the first timeframe and the other timeframes will be updated by compaction rules(if any).
+
+Usage example for update:
+
+```python
+t.update_values(
+    c1='building1',
+    c2='sensor2',
+    timestamp=123457,
+    values={
+        'l2': 100,
+    }
+)
+```
 
 # Usage without data compaction
 
