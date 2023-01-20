@@ -377,16 +377,16 @@ class RedisTimeseriesManager:
             return False, message
 
 
-    def update(self, c1:str, c2:str, timestamp:int, values:dict):
+    def update(self, values:dict, c1:str, c2:str, timestamp:int):
         """Update values at an existing timestamp
         This will only update the provided values at an existing timestamp. Other values will be untouched.
         Update will be applied on the first timeframe, other timeframes will be updated by compaction rules(if any)
 
         Args:
+            values (dict): key-value pairs of updating data, Every key must be a valid line
             c1 (str): classifier 1
             c2 (str): classifier 2
             timestamp (int): timestamp with existing values
-            values (dict): key-value pairs of updating data, Every key must be a valid line
 
 
         Returns:

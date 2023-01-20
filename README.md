@@ -121,7 +121,7 @@ Since v2.0, pandas dataframes are supported. You can choose the format of output
 
 ## Updating data
 
-Lines data at an existing timestamp can be updated individually by taking advantage of `update(c1:str, c2:str, timestamp:int, values:dict)` method.
+Lines data at an existing timestamp can be updated individually by taking advantage of `update(values:dict, c1:str, c2:str, timestamp:int)` method.
 
 `values` are key-value pairs of data to be updated at the time `timestamp` and all provided `keys` must correspond to an existing `line` in timeseries. If you don't include a line, the value at that line will be untouched. 
 
@@ -131,12 +131,12 @@ Usage example for update:
 
 ```python
 t.update(
-    c1='building1',
-    c2='sensor2',
-    timestamp=123457,
     values={
         'l2': 100,
-    }
+    },
+    c1='building1',
+    c2='sensor2',
+    timestamp=123457
 )
 ```
 
