@@ -385,15 +385,3 @@ class MarketData(RedisTimeseriesManager):
 > [***view the full example and usage***](examples/market_data.ipynb)
 
 
-# Testing
-
-This is not about testing. Life under the shadow of a dictatorial government is terrible. You have to overcome problems that basically does not exist; those that are created by them.
-
-You have no right to protest, because you will be threatened first, if you persist, you will be arrested and punished, and it is not far off to be killed.
-
-The right to free access to information contradicts their nature. They use any means to censor and disrupt the free flow of information.
-Life there requires skills that are less than to imagine. One of these skills is making or using tools to bypass censorship to do your job. Using these tools is like a game of cat and mouse, a new tool works but not forever, you have to take time and keep yourself updated as you will need to use new tools.
-
-What may happen when building a package: You wake up in the morning and find that the internet speed is so terrible that a test that should be done in less than 30 seconds takes 35 minutes.
-
-![image](https://user-images.githubusercontent.com/10188878/213711802-0709a768-68a9-4e4b-ab0d-9c41fe2c5ba2.png)

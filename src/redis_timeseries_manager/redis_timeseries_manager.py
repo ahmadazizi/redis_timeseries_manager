@@ -805,6 +805,25 @@ class RedisTimeseriesManager:
         return self.client.exists(self._get_test_key_name(c1.lower(), c2.lower()))
 
 
+    def reset_ts(self, name:str):
+        """Reset series
+        WARNING: THIS WILL REMOVE ALL THE KEYS(AND DATA) ASSOCIATED WITH THIS TIMESERIES
+        USE THIS WITH CAUTION, YOU WILL LOSE ALL THE DATA
+
+        Args:
+            name (str): provide the name of this series, must be the same as `_name` (used for confirmation)
+
+        Returns:
+            str: message
+        """
+        if name == self._name:
+            keys = self.query_index(return_key_names=True)
+            for key in keys:
+                self.client.delete(key)
+            return f"Reset successful. {len(keys)} keys has been deleted"
+        return False
+
+
     ######## CLASS & STATIC METHODS ################################
 
     @classmethod
