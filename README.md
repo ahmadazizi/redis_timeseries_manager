@@ -12,7 +12,9 @@ Redis is an open source (BSD licensed), in-memory data structure store used as a
 
 To install RedisTimeseriesManager, run the following command:
 
-```pip install --upgrade redis_timeseries_manager```
+```
+pip install --upgrade redis_timeseries_manager
+```
 
 
 ## Usage

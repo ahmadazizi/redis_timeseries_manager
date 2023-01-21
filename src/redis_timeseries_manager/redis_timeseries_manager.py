@@ -817,10 +817,10 @@ class RedisTimeseriesManager:
             str: message
         """
         if name == self._name:
-            keys = self.query_index(return_key_names=True)
+            keys = self.query_index(return_key_names=True)[1]
             for key in keys:
                 self.client.delete(key)
-            return f"Reset successful. {len(keys)} keys has been deleted"
+            return f"Reset successful. {len(keys)} keys have been deleted"
         return False
 
 
