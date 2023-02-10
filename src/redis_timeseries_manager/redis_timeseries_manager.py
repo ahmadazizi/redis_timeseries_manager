@@ -211,6 +211,7 @@ class RedisTimeseriesManager:
         """
         c1 = c1.lower()
         c2 = c2.lower()
+        key = ''
         try:
             if not to_timestamp:
                 to_timestamp = int(time.time())
@@ -222,7 +223,7 @@ class RedisTimeseriesManager:
                     self.ts.delete(key, from_timestamp, to_timestamp)
             return True, f"Cleard data of {c1}:{c2} from {from_timestamp} to {to_timestamp}"
         except Exception as e:
-            message = f"Error clearing data of key {key} from {from_timestamp} to {to_timestamp}; {e}"
+            message = f"Error clearing data of key {key} of {c1}:{c2} from {from_timestamp} to {to_timestamp} -> {e}"
             return False, message
 
 
@@ -606,8 +607,8 @@ class RedisTimeseriesManager:
             record_length = self.get_read_length(record, return_as)
             if record_length != 1:
                 raise Exception(f"Expected exactly one record, {record_length} was returned")
-            if return_as != "raw":
-                record = record[0] if return_as != 'df' else record.iloc[0]
+            # if return_as != "raw":
+            #     record = record[0] if return_as != 'df' else record.iloc[0]
             return True, record
         except Exception as e:
             return False, str(e)
@@ -820,7 +821,7 @@ class RedisTimeseriesManager:
             keys = self.query_index(return_key_names=True)[1]
             for key in keys:
                 self.client.delete(key)
-            return f"Reset successful. {len(keys)} keys have been deleted"
+            return f"Reset successful. {len(keys)} keys have been deleted. List of deleted keys: {keys}"
         return False
 
 
@@ -831,6 +832,7 @@ class RedisTimeseriesManager:
         filters = [f'tl={cls._name}']
         for filter_name, filter_value in kwargs.items():
             if filter_value is not None:
+                filter_value = str(filter_value).replace(' ', '') if type(filter_value) is tuple else str(filter_value)
                 filters.append(f"{filter_name}={filter_value}")
         return filters
     
