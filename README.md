@@ -1,12 +1,9 @@
 # RedisTimeseriesManager
 
 RedisTimeseriesManager is a redis timeseries management system that enhance redis timeseries with features including multi-line data, built-in timeframes, data classifiers and convenient data accessors. This is achieved by maintaing a set of timeseries that are tied together(called ***lines***) and interact with them as a whole. 
-As a result, multiple timeseries values can be refered with a timestamp as if they are stored in a table with a timestamp and multiple columns.
+As a result, multiple timeseries values can be refered with a timestamp as if they are stored in a table with a timestamp and multiple columns. `RedisTimeseriesManager` uses RedisTimeSeries to store timeseries data.
 
-This library supports two levels of data classifiers(c1, c2) to interact with data, plus support for timeframes and data compression(downsampling).
-
-## About RedisTimeSeries
-Redis is an open source (BSD licensed), in-memory data structure store used as a database, cache, message broker, and streaming engine. RedisTimeSeries is a Redis module that adds a time series data structure to Redis. `RedisTimeseriesManager` uses RedisTimeSeries to store timeseries data.
+This library supports classification of data at multiple levels, plus support for timeframes and data compression(downsampling).
 
 ## Installation
 
@@ -15,6 +12,8 @@ To install RedisTimeseriesManager, run the following command:
 ```
 pip install --upgrade redis_timeseries_manager
 ```
+
+### If you are upgrading from an older version, [see the change log](#change-log)
 
 
 ## Usage
@@ -107,11 +106,17 @@ t.read(
     c1='building1',
     c2='sensor1',
 )
+# For convenience, an alternate way to provide classifiers while reading the data is the filters paramter:
+t.read(
+    filters={
+        'c1': 'building1',
+        'c2': 'sensor1',
+    }
+)
 ```
     [[123456, 1.0, 2.0], [123457, 3.0, 4.0], [123458, 5.0, 6.0]]
 
-There are also some other methods to read or investigate about the data. `read_last_n_records()`, `read_last_nth_record()`, `read_last()` and `find_last()` are those methods. 
-Some additional parameters can also be used to control what data are read, they include `from_timestamp`, `to_timestamp` and `extra_records`. Refer to the documentations of each method for details.
+There are also some other parameters in the `read()` method that can help further filter out data stored in the timeseries or to investigate about them. They include `timeframe`, `from_timestamp`, `to_timestamp`, `limit`, `read_from_last` and `latest`. You can also modify the output format using `line_order` and `return_as` parameters. Refer to the corresponding documentation in the `read()` method for details.
 
 
 ## Output Formats
@@ -146,9 +151,7 @@ t.update(
 
 If you do not need data to be compressed across timeframes, you can set only a single timeframe in `_timeframes` class property. This will fully disable compaction functionality; but note that at least one timeframe must be set always.
 
-> ***WARNING:***
->
-> Due to [an unfixable bug in redis timeseries module](https://github.com/RedisTimeSeries/RedisTimeSeries/issues/1118) only use `db` with index `0` while data compaction is required; otherwise compaction rules won't work.
+> ***WARNING:*** Due to [an unfixable bug in redis timeseries module](https://github.com/RedisTimeSeries/RedisTimeSeries/issues/1118) only use `db` with index `0` while data compaction is required; otherwise compaction rules won't work.
 
 To have a separate timeframe without data compaction, set `ignore_rules` to `True` in the timeframe definition:
 
@@ -163,9 +166,9 @@ In the above example, the `1d` timeframe is isolated and no compaction rule will
 One usage may be in the case that you want to keep track and maintain the minute data but have a separate data source for daily data. Keep in mind that you should never write data directly into the timeframes that the result of compaction rules are written. In the above example, the `1m`(default) and `1d` timeframes are safe to write directly.
 
 
-# Usage with more than two classifiers
+# Usage with more than two classifiers(Extending classifiers)
 
-While in most use cases, two classifiers for the data must be enough; there might be scenarios where more than two classifiers for the data are required. In such cases, you can extend the classifiers in `c1` or `c2` classifier.
+While in most use cases, two classifiers for the data must be enough; there might be scenarios where more than two classifiers for the data is required. In such cases, you can extend the classifiers in `c1` or `c2` classifier.
 
 As of version 2.1, redis_timeseries_manager supports `extra_labels` that gives the ability to set custom labels for the data. The main advantage of labels in redis timeseries emerges when you utilize them with *redis multi-timeseries commands* like [TS.MRANGE](https://redis.io/commands/ts.mrange/)
 
@@ -202,7 +205,7 @@ tl.insert(
         [123459, 13, 14],
     ],
     c1='performance',
-    c2='u_1_22_46',
+    c2='u_1_22_46', # generally you have to generate this string programmatically
     extra_labels={
         'user_id': 1,
         'strategy_id': 22,
@@ -240,6 +243,16 @@ tl.read(
     },
     return_as='df'
 )
+# the same functionality can be achieved using the filters parameter:
+tl.read(
+    filters={
+        'c1': 'performance',
+        'user_id': 2,
+        'strategy_id': 22,
+        'sample_id': 46
+    }
+    return_as='df'
+)
 ```
 
 | time | l1	| l2 |
@@ -275,8 +288,10 @@ tl.read(
 | 123459 | 13.0 | 14.0 |
 | 123460 | 113.0 | 114.0 |
 
+> ***WARNING:*** 
+Consider only concepts that distinguish/identify the class of data as the extended classifiers. This means that the number of these concepts will be very few while many other concepts can be considered in the form of data.
 
-# Advanced Usage Examples
+# Usage Examples
 
 ## Example 1: Sensor Data
 
@@ -387,3 +402,8 @@ class MarketData(RedisTimeseriesManager):
 > [***view the full example and usage***](examples/market_data.ipynb)
 
 
+# Change Log
+(Since version 2.3)
+## ver. 2.3 (Aug 18, 2023)
+- In favor of improvements in read() method, some of the old methods associated with reading information have become obsolete. They include read_last_n_records(), read_last_nth_record() and read_last(). Similar functionality is available in read() method.
+- The read() method does not rely on classifier(c1 and c2) parameters anymore. You can now fully omit these parameters while reading data and instead use filters parameter. The filters parameter is all inclusive, meaning it can take c1, c2 (filters={'c1': 'something', 'c2': 'another'}) or in case of an extended classifier it takes label-value pairs of classifiers.

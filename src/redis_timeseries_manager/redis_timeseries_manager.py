@@ -418,7 +418,7 @@ class RedisTimeseriesManager:
             return False, str(e)
 
 
-    def read(
+    def read_old(
             self,
             c1:Union[str, dict],
             c2:Union[str, dict],
@@ -433,14 +433,15 @@ class RedisTimeseriesManager:
             return_as:str = 'list'
         ):
         """Read records based on conditions
+        THIS METHOD IS OBSOLETE AND WILL BE REMOVED
         Args:
             c1 (str|dict): c1 classifier or a dictionary containing label filters
             c2 (str|dict): c2 classifier or a dictionary containing label filters
             timeframe (str, optional): timeframe. Defaults to 1st timeframe.
             from_timestamp (int, optional): Defaults to 0.
             to_timestamp (int, optional): Defaults to timestamp of current time.
-            extra_records (int, optional): Number of extra_records before from_timestamp. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
-            timestamp_minimum_boundary (int, optional): When extra_records set, this limits how much from_timestamp can decline. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
+            extra_records (int, optional): (DEPRECATED) Number of extra_records before from_timestamp. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
+            timestamp_minimum_boundary (int, optional): (DEPRECATED) When extra_records set, this limits how much from_timestamp can decline. Defaults to None. [THIS FEATURE IS EXPERIMENTAL]
             from_timestamp_inclusive(bool, optional): If enabled, the output range will include the from_timestamp data. Default enabled
             line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
             allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
@@ -476,6 +477,75 @@ class RedisTimeseriesManager:
             return False, message
 
 
+    def read(
+        self,
+        c1:Union[str, dict]=None,
+        c2:Union[str, dict]=None,
+        filters:dict=None,
+        timeframe:str=None,
+        from_timestamp:int=None,
+        to_timestamp:int=None,
+        from_timestamp_inclusive:bool=True,
+        limit:int=1000,
+        read_from_last:bool=False,
+        latest:bool=False,
+        line_order:list=None,
+        allow_multiple:bool=False,
+        return_as:str = 'list'
+    ):
+        """Read records based on labels and/or other conditions
+        Unlike the old read(), this method does not rely on classifier parameters; instead label filters are utilized and must be provided to filter out samples.
+        String and label classifiers can be passed to this method as filters: filters={'c1': 'something', 'c2': 'another'}
+        
+        Args:
+            c1 (str|dict): c1 classifier or a dictionary containing label filters (Not recommended; include `c1` classifier in `filters` parameter instead: {'c1': 'value'})
+            c2 (str|dict): c2 classifier or a dictionary containing label filters (Not recommended; include `c2` classifier in `filters` parameter instead: {'c2': 'value'})
+            filters (dict, optional): key-value pairs to filter out samples
+            timeframe (str, optional): timeframe. Defaults to 1st timeframe.
+            from_timestamp (int, optional): Defaults to 0.
+            to_timestamp (int, optional): Defaults to timestamp of current time.
+            from_timestamp_inclusive(bool, optional): If enabled, the output range will include the from_timestamp data. Default enabled
+            limit(int, optional): Limit the number of records to read. Defaults to 1000
+            read_from_last(bool, optional): If set to True, the latest samples will be returned(instead earliest) when the number of read records are limited. For e.g. to read only the last record set `limit' to 1 and `read_from_last` to True. Defaults to False
+            latest(bool, optional): Used when reading from a compacted timeframe, reports the compacted value of the latest possibly partial bucket(Only supported in RedisTimeSeries v1.8+). Defaults to False
+            line_order(list, optional): Optional order(or filter) of output data. The default order is as the class `_lines` property. E.g. if _lines is ['x', 'y', 'z'] and you need only `z` and `y` in order, you can set `line_order` to ['z', 'y']
+            allow_multiple(bool, optional) Allow combine multiple sets of data. This may results in multiple data-points with the same time. Defaults to False
+            return_as(str, optional): Set the output format(default format is `list`). Available options are `raw`, `df`, `list`, `dict`, `sets-df`, `sets-list` and `sets-dict`
+        Returns:
+            Any: list|df|raw of data like [`timestamp(secs)`, `line1`, `line2`, ...]
+        """
+        try:
+            timeframe= timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
+            if from_timestamp and type(from_timestamp) is int:
+                from_timestamp = from_timestamp*1000 if from_timestamp_inclusive else from_timestamp*1000+1
+            else:
+                from_timestamp = '-'
+            to_timestamp = to_timestamp*1000 if to_timestamp and type(to_timestamp) is int else '+'
+            _filters = {} if type(filters) is not dict else {**filters}
+            # adding classifiers(c1 and c2) as filters for compatibility
+            if c1 is not None:
+                self._add_classifier_label(_filters, 'c1', c1)
+            if c2 is not None:
+                self._add_classifier_label(_filters, 'c2', c2)
+            _filters['timeframe'] = timeframe
+            params = {
+                'from_time': from_timestamp,
+                'to_time': to_timestamp,
+                'with_labels': True,
+                'filters': self.create_filters(**_filters),
+            }
+            if type(limit) is int and limit > 0:
+                params['count'] = limit
+            if latest is True:
+                params['latest'] = True
+            raw = self.ts.mrange(**params) if not read_from_last else self.ts.mrevrange(**params)
+            # raw data is now collected; redis would already has raised exception in case of error
+            return self._prepare_read_data(data=raw, line_order=line_order, allow_multiple=allow_multiple, data_is_reversed=read_from_last, return_as=return_as)
+        except Exception as e:
+            message = f"Failed to read data` -> {e}"
+            return False, message
+
+
     def read_last_n_records(
             self,
             c1:Union[str, dict],
@@ -488,6 +558,7 @@ class RedisTimeseriesManager:
             return_as:str = 'list'
         ):
         """read the last n records
+            NOTICE: THIS METHOD IS OBSOLETE AND WILL BE REMOVED. USE read() INSTEAD
         Args:
             c1 (str|dict): c1 classifier or a dictionary containing label filters
             c2 (str|dict): c2 classifier or a dictionary containing label filters
@@ -553,6 +624,7 @@ class RedisTimeseriesManager:
             return_as:str = 'list'
         ):
         """return the last nth record
+            NOTICE: THIS METHOD IS OBSOLETE AND WILL BE REMOVED. USE read() INSTEAD
         Args:
             c1 (str|dict): c1 classifier or a dictionary containing label filters
             c2 (str|dict): c2 classifier or a dictionary containing label filters
@@ -590,7 +662,7 @@ class RedisTimeseriesManager:
                 raise Exception(f"Could not locate record at position {n} from last")
             # everything is ready to fetch actual data
             target_timestamp = int(pivot_timestamp / 1000)
-            success, record = self.read(
+            success, record = self.read_old(
                 c1,
                 c2,
                 timeframe=timeframe,
@@ -609,6 +681,8 @@ class RedisTimeseriesManager:
                 raise Exception(f"Expected exactly one record, {record_length} was returned")
             # if return_as != "raw":
             #     record = record[0] if return_as != 'df' else record.iloc[0]
+            if return_as == 'list':
+                record = record[0]
             return True, record
         except Exception as e:
             return False, str(e)
@@ -616,13 +690,14 @@ class RedisTimeseriesManager:
     
     def read_last(self, c1:str=None, c2:str=None, timeframe:str=None, line_order:list=None, return_as:str='list'):
         """read the last record
+            NOTICE: THIS METHOD IS OBSOLETE AND WILL BE REMOVED. USE read() INSTEAD
             If exactly the last record is required, this performs faster than read_last_nth_record(n=1)
             Notice: This method only supports string classifiers right now; #TODO
         """
         try:
             timeframe = timeframe.lower() if timeframe else self._get_timeframe_at_position(0)
             if not c1 or not c2:
-                last = self.last_record(c1, c2, timeframe)
+                last = self.find_last(c1, c2, timeframe)
                 if not last[0]:
                     raise Exception(last[1])
                 last = last[1]
@@ -633,7 +708,7 @@ class RedisTimeseriesManager:
             if ref is None:
                 raise Exception("No data returned")
             timestamp = int(ref[0] / 1000)
-            success, record = self.read(
+            success, record = self.read_old(
                 c1,
                 c2,
                 timeframe=timeframe,
@@ -832,7 +907,7 @@ class RedisTimeseriesManager:
         filters = [f'tl={cls._name}']
         for filter_name, filter_value in kwargs.items():
             if filter_value is not None:
-                filter_value = str(filter_value).replace(' ', '') if type(filter_value) is tuple else str(filter_value)
+                filter_value = str(filter_value).replace(' ', '').replace(',)', ')') if type(filter_value) is tuple else str(filter_value)
                 filters.append(f"{filter_name}={filter_value}")
         return filters
     
@@ -895,9 +970,11 @@ class RedisTimeseriesManager:
 
 
     @classmethod
-    def _prepare_read_data(cls, data, line_order=None, allow_multiple:bool=False, return_as:str='list'):
+    def _prepare_read_data(cls, data, line_order=None, allow_multiple:bool=False, data_is_reversed:bool=False, return_as:str='list'):
         try:
             line_order = line_order or cls._lines
+            if 'time' in line_order:
+                line_order.remove('time')
             if not data:
                 return True, pd.DataFrame([], columns=['time', *line_order]) if return_as == 'df' else []
             data_sets = dict()
@@ -930,6 +1007,8 @@ class RedisTimeseriesManager:
                 output = []
                 for s in data_sets.keys():
                     data_sets[s]['df']['time'] = (data_sets[s]['df']['time']/1000).astype(int)
+                    if data_is_reversed:
+                        data_sets[s]['df'].sort_values(by='time', inplace=True, ignore_index=True)
                     if return_as == 'sets-df':
                         output.append((data_sets[s]['labels'], data_sets[s]['df']))
                     elif return_as == 'sets-dict':
@@ -946,7 +1025,7 @@ class RedisTimeseriesManager:
                     df = pd.concat([df, dataset['df']])
             # finalizing output
             df['time'] = (df['time']/1000).astype(int)
-            if len(data_sets) > 1:
+            if len(data_sets) > 1 or data_is_reversed:
                 df.sort_values(by='time', inplace=True, ignore_index=True)
             # df.set_index('time', inplace=True) # the index column will not be included when converted to list; no need to set time as index
             if return_as == 'df':
